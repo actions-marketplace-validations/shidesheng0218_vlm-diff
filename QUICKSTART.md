@@ -55,12 +55,25 @@ Open `report.html` to see before/after with the changed regions boxed and number
 ```bash
 node dist/cli/main.js init http://localhost:3000/   # creates .vlm-diff/config.json
 # edit .vlm-diff/config.json to list every page you want watched
-node dist/cli/main.js baseline                       # capture the golden state
+vlm-diff baseline                       # capture the golden state
 # …later, on any change…
-node dist/cli/main.js check                          # diff every page vs baseline
+vlm-diff check                          # diff every page vs baseline
+vlm-diff review                         # approve intentional changes per page
+vlm-diff trends                         # change frequency + flaky-page detection
 ```
 
 `check` prints one line per page with the change type + severity, and exits `0`/`1`/`3` for CI gating.
+
+Two knobs worth knowing: `"ignore": ["#ad-slot", "[data-timestamp]"]` in `.vlm-diff/config.json` masks dynamic content (ads, timestamps) so it never false-alarms; per-page `actions` (`click`/`hover`/`scrollY`/`waitMs`) capture interactive states, and a `viewports` array adds a responsive matrix.
+
+### Inside existing Playwright tests
+
+```ts
+import { capturePage, checkAgainstBaseline } from "vlm-diff/playwright";
+
+const before = await capturePage(page);           // screenshot + DOM snapshot in one call
+const verdict = await checkAgainstBaseline(page, "home");
+```
 
 ## Run the offline demo (no key, no server)
 

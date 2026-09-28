@@ -6,7 +6,7 @@
 // All files live under .vlm-diff/ so the state is version-controllable and
 // the project root is anchored (see cli/project.ts).
 
-import { mkdir, readFile, writeFile, access, readdir, appendFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, access, readdir, appendFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { diffPair, type DiffVerdict } from "../core/diff.js";
 import { cacheDir, projectFile } from "./project.js";
@@ -32,14 +32,30 @@ export async function existingBaselinePages(root: string): Promise<string[]> {
   }
 }
 
+/** interaction steps applied before capturing (open a menu, hover a state, scroll) */
+export interface PageAction {
+  click?: string;
+  hover?: string;
+  scrollY?: number;
+  waitMs?: number;
+}
+
 export interface PageTarget {
   name: string;
   url: string;
+  /** actions applied after load, before capture (interactive states) */
+  actions?: PageAction[];
+  /** per-page viewport overrides (multi-viewport responsive checks) */
+  viewports?: Array<{ width: number; height: number }>;
 }
 
 export interface VlmDiffConfig {
   viewport: { width: number; height: number };
   pages: PageTarget[];
+  /** selectors for dynamic content to mask (ads, timestamps, carousels) */
+  ignore?: string[];
+  /** global viewport matrix — every page is captured at each size */
+  viewports?: Array<{ width: number; height: number }>;
 }
 
 export interface PageCheckResult {
@@ -83,6 +99,25 @@ interface CapturedPage {
   url: string;
   png: Buffer;
   dom: string;
+  /** rects of config.ignore selectors resolved at capture time */
+  ignoreRects?: Array<{ x: number; y: number; w: number; h: number }>;
+}
+
+/** Resolve ignore selectors to bounding rects in the page (string expression: tsx-injected helpers don't exist in-page). */
+async function resolveIgnoreRects(
+  page: import("playwright").Page,
+  selectors: string[],
+): Promise<Array<{ x: number; y: number; w: number; h: number }>> {
+  return page.evaluate(`(() => {
+    const out = [];
+    for (const sel of ${JSON.stringify(selectors)}) {
+      document.querySelectorAll(sel).forEach((el) => {
+        const r = el.getBoundingClientRect();
+        out.push({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) });
+      });
+    }
+    return out;
+  })()`);
 }
 
 async function capturePages(config: VlmDiffConfig): Promise<CapturedPage[]> {
@@ -92,17 +127,36 @@ async function capturePages(config: VlmDiffConfig): Promise<CapturedPage[]> {
   try {
     const out: CapturedPage[] = [];
     for (const target of config.pages) {
-      const page = await browser.newPage({ viewport: config.viewport });
-      await page.goto(target.url, { waitUntil: "load", timeout: 30000 });
-      await page.waitForTimeout(100);
-      const png = (await page.screenshot()) as Buffer;
-      const dom = await snapshotDom(page);
-      out.push({ name: target.name, url: target.url, png, dom });
-      await page.close();
+      // page-level viewports override the global matrix; single viewport keeps
+      // the plain name so existing baselines stay compatible
+      const viewports = target.viewports ?? config.viewports ?? [config.viewport];
+      const multiViewport = viewports.length > 1;
+      for (const vp of viewports) {
+        const page = await browser.newPage({ viewport: vp });
+        await page.goto(target.url, { waitUntil: "load", timeout: 30000 });
+        await page.waitForTimeout(100);
+        await applyActions(page, target.actions);
+        const png = (await page.screenshot()) as Buffer;
+        const dom = await snapshotDom(page);
+        const ignoreRects = config.ignore?.length ? await resolveIgnoreRects(page, config.ignore) : undefined;
+        const name = multiViewport ? `${target.name}@${vp.width}x${vp.height}` : target.name;
+        out.push({ name, url: target.url, png, dom, ...(ignoreRects?.length ? { ignoreRects } : {}) });
+        await page.close();
+      }
     }
     return out;
   } finally {
     await browser.close();
+  }
+}
+
+/** Interaction steps applied after load, before capture (menu open, hover, scroll). */
+async function applyActions(page: import("playwright").Page, actions: PageAction[] | undefined): Promise<void> {
+  for (const a of actions ?? []) {
+    if (a.click) await page.click(a.click);
+    if (a.hover) await page.hover(a.hover);
+    if (a.scrollY !== undefined) await page.evaluate(`window.scrollTo(0, ${a.scrollY})`);
+    if (a.waitMs) await page.waitForTimeout(a.waitMs);
   }
 }
 
@@ -128,6 +182,10 @@ export async function runBaseline(
   for (const c of captured) {
     await writeFile(path.join(dir, `${c.name}.png`), c.png);
     await writeFile(path.join(dir, `${c.name}.dom.json`), c.dom);
+    // ignore-rect sidecar: the masks the golden state was captured with
+    const ignorePath = path.join(dir, `${c.name}.ignore.json`);
+    if (c.ignoreRects?.length) await writeFile(ignorePath, JSON.stringify(c.ignoreRects));
+    else await rm(ignorePath, { force: true });
   }
   await appendHistory(root, {
     action: "baseline",
@@ -156,9 +214,16 @@ export async function runCheck(
     try {
       const basePng = await readFile(path.join(dir, `${c.name}.png`));
       const baseDom = await readFile(path.join(dir, `${c.name}.dom.json`), "utf8");
+      // union of baseline-side + current-side ignore rects (either side may move)
+      let ignoreRects = c.ignoreRects ?? [];
+      try {
+        const stored = JSON.parse(await readFile(path.join(dir, `${c.name}.ignore.json`), "utf8")) as Array<{ x: number; y: number; w: number; h: number }>;
+        ignoreRects = [...ignoreRects, ...stored];
+      } catch { /* no baseline-side masks */ }
       const verdict = await diffPair(basePng, c.png, baseDom, c.dom, {
         provider: opts.noVlm ? undefined : opts.provider,
         cache: new FileCacheStore(cacheDir(root)),
+        ignoreRects: ignoreRects.length > 0 ? ignoreRects : undefined,
       });
       results.push({ name: c.name, url: c.url, verdict });
       if (opts.reportDir && verdict.changed) {
@@ -206,6 +271,7 @@ export async function runCheck(
           severity: r.verdict?.severity ?? null,
           summary: r.verdict?.summary ?? null,
           regions: r.verdict?.regions.length ?? 0,
+          domIds: r.verdict?.regions.map((x) => x.domId).filter(Boolean) ?? [],
           evidence: r.verdict?.regions
             .map((x) => x.evidence?.domChangedFields?.join(","))
             .filter(Boolean)

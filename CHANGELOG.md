@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.7.0] — 2026-09-20
+
+The "absorb the competitors' best ideas" release.
+
+### Playwright SDK
+
+- New `vlm-diff/playwright` subpath export (`src/sdk/playwright.ts`, with types): `capturePage(page)` returns `{png, dom}` in one call; `checkAgainstBaseline(page, name, opts)` diffs a page against its golden baseline and returns the full `DiffVerdict` (with `baselineMissing` when no golden exists). Integration into an existing Playwright suite is two lines.
+
+### Ignore regions (dynamic-content masks)
+
+- `.vlm-diff/config.json` gains `"ignore": ["#ad-slot", "[data-timestamp]"]`. Selectors resolve to rects at capture time (stored as `*.ignore.json` sidecars next to baselines); at diff time, pixel deltas inside those rects are masked out before the noise threshold and DOM changes fully inside them are dropped. Timestamps/ads/carousels stop being false positives.
+- `vlm-diff diff --ignore-rect "x,y,w,h[;…]"` for ad-hoc masking.
+- Live-verified: a real button color change inside an ignored region reports "no change" end-to-end.
+
+### Scenario actions + viewport matrix
+
+- Pages in config can carry `actions: [{click: "#menu"}, {hover: ".nav"}, {scrollY: 300}, {waitMs: 500}]` (applied after load, before capture) and per-page or global `viewports` arrays; multi-viewport captures are named `home@390x844`.
+- Live-verified: a click-opened menu round-trips cleanly (identical with-action runs; removing the action surfaces the menu's geometry change).
+
+### flaky → ignore loop
+
+- `vlm-diff trends --suggest-ignores`: pages that flip changed↔unchanged across checks get their changed regions' DOM ids printed as candidate `#id` selectors — review before adding to `ignore`.
+
+Tests: 212 → 217.
+
 ## [0.6.0] — 2026-09-20
 
 The "deepen the moat, strengthen the weaknesses" release.

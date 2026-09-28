@@ -33,6 +33,27 @@ export interface TrendSummary {
   flakyPages: PageTrend[];
 }
 
+/**
+ * Suggest ignore selectors for flaky pages: pages that flip between
+ * changed/unchanged across checks get their changed regions' DOM ids mapped
+ * to `#id` selectors (printed for a human to confirm, never auto-written).
+ */
+export async function suggestIgnores(root: string): Promise<{ flakyPages: string[]; selectors: string[] }> {
+  const trends = await computeTrends(root);
+  if (trends.flakyPages.length === 0) return { flakyPages: [], selectors: [] };
+  const flakyNames = new Set(trends.flakyPages.map((p) => p.name));
+
+  const raw = await readFile(projectFile(root, "current", "last-check.json"), "utf8").catch(() => null);
+  if (!raw) return { flakyPages: [...flakyNames], selectors: [] };
+  const parsed = JSON.parse(raw) as { pages: Array<{ name: string; domIds?: string[] }> };
+  const selectors: string[] = [];
+  for (const p of parsed.pages) {
+    if (!flakyNames.has(p.name)) continue;
+    for (const id of p.domIds ?? []) if (id) selectors.push(`#${id}`);
+  }
+  return { flakyPages: [...flakyNames], selectors: [...new Set(selectors)] };
+}
+
 export async function computeTrends(root: string): Promise<TrendSummary> {
   const raw = await readFile(projectFile(root, "history.jsonl"), "utf8");
   const entries: HistoryEntry[] = raw

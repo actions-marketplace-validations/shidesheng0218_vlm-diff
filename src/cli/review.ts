@@ -18,6 +18,7 @@ export interface ReviewPage {
   regions: number;
   evidence: string | null;
   a11yImpact: string | null;
+  domIds?: string[];
   error?: string;
 }
 

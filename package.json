@@ -1,6 +1,6 @@
 {
   "name": "vlm-diff",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "The visual verifier for agentic coding workflows — deterministic-first UI screenshot diffing (DOM+pixel), tiered descriptions, CLI, MCP server, GitHub Action",
   "type": "module",
   "bin": {
@@ -82,6 +82,13 @@
     "dist/util",
     "dist/eval/baselines.js",
     "dist/eval/types.js",
-    "action.yml"
-  ]
+    "action.yml",
+    "dist/sdk"
+  ],
+  "exports": {
+    "./playwright": {
+      "types": "./dist/sdk/playwright.d.ts",
+      "default": "./dist/sdk/playwright.js"
+    }
+  }
 }

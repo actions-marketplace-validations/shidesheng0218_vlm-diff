@@ -249,9 +249,37 @@ vlm-diff baseline                       # golden snapshots → .vlm-diff/baselin
 vlm-diff check                          # diff every page vs baseline, CI exit codes
 vlm-diff review                         # approve changed pages (interactive; --approve-all in CI)
 vlm-diff trends                         # change frequency + flaky-page detection from history
+vlm-diff trends --suggest-ignores       # mask candidates for flaky pages (review before adding)
 # or refresh everything explicitly (confirmation required):
 vlm-diff baseline --yes
 ```
+
+Config knobs in `.vlm-diff/config.json`:
+
+```jsonc
+{
+  "viewport": { "width": 960, "height": 500 },
+  "viewports": [{ "width": 1280, "height": 800 }, { "width": 390, "height": 844 }],  // responsive matrix
+  "ignore": ["#ad-slot", "[data-timestamp]"],   // dynamic-content masks — never flagged
+  "pages": [
+    { "name": "home", "url": "http://localhost:3000/" },
+    { "name": "menu-open", "url": "http://localhost:3000/", "actions": [{ "click": "#menu-btn" }] }
+  ]
+}
+```
+
+### Playwright SDK (two lines inside your existing tests)
+
+```ts
+import { capturePage, checkAgainstBaseline } from "vlm-diff/playwright";
+
+const before = await capturePage(page);           // screenshot + DOM snapshot in one call
+// …apply your change…
+const verdict = await checkAgainstBaseline(page, "home");  // diff vs the golden baseline
+if (verdict.changed) console.log(verdict.severity, verdict.summary);
+```
+
+`checkAgainstBaseline` returns the full `DiffVerdict` (changeType, severity, evidence, a11y impact) and `baselineMissing: true` when no golden exists yet (seed it with `vlm-diff baseline`).
 
 ### MCP server (agents verify their own UI edits)
 
@@ -384,6 +412,7 @@ Paper draft: [paper/vlm-diff.tex](paper/vlm-diff.tex) · writeups: [Dev.to](http
 <details>
 <summary><b>Release history</b></summary>
 
+- **v0.7** — Playwright SDK (`vlm-diff/playwright`), ignore regions for dynamic content, scenario actions + viewport matrix, flaky→ignore suggestions
 - **v0.6** — attribute-aware capture (image swaps/link targets now deterministic), deterministic a11y (WCAG contrast + alt/aria), `review` + `trends` workflow
 - **v0.5** — agent verifier: MCP image blocks + structuredContent, GitHub Action, `check --json/--report`
 - **v0.4** — trust & cost: evidence everywhere, baseline overwrite confirmation, cost log, budget gate, timeouts, output caps

@@ -15,7 +15,7 @@ import { FileCacheStore } from "../cache/store.js";
 import { cacheDir, findProjectRoot } from "./project.js";
 import { runInit, runBaseline, runCheck, checkExitCode, existingBaselinePages } from "./baseline.js";
 import { loadPendingReview, approvePages, recordReview, reviewInteractive, type ReviewOutcome } from "./review.js";
-import { computeTrends, formatTrends } from "./trends.js";
+import { computeTrends, formatTrends, suggestIgnores } from "./trends.js";
 
 function usage(): string {
   return `vlm-diff — deterministic-first UI screenshot diffing
@@ -30,6 +30,7 @@ Usage:
   vlm-diff review           approve changed pages from the last check
                             (interactive on a TTY; --approve a,b or --approve-all in CI)
   vlm-diff trends           aggregate .vlm-diff/history.jsonl into a trend summary
+                            (--suggest-ignores: mask candidates for flaky pages)
 
 diff options:
   --dom-before <file>     JSON DOM snapshot of the before frame (from \`vlm-diff snapshot\`)
@@ -38,6 +39,8 @@ diff options:
   --model <id>            model id override (default: provider preset)
   --threshold <fraction>  pixel-only escalation threshold, fraction of frame (default 0.002)
   --max-regions <n>       cap on regions to describe/classify (default 8)
+  --ignore-rect <rects>   mask dynamic content: "x,y,w,h;x,y,w,h" — changes fully
+                          inside these rects never count (ads, timestamps)
   --no-cache              skip the classification cache (.cache/classifications)
   --no-vlm                detection only: never call a VLM API
   --json                  machine-readable single-line JSON output
@@ -79,10 +82,12 @@ async function runDiff(args: ParsedArgs): Promise<number> {
 
   const threshold = args.flags.get("threshold");
   const maxRegions = args.flags.get("max-regions");
+  const ignoreRects = parseIgnoreRects(args.flags.get("ignore-rect"));
 
   const verdict = await diffPair(beforePng, afterPng, domBeforeJson, domAfterJson, {
     pixelOnlyThreshold: typeof threshold === "string" ? Number(threshold) : undefined,
     maxRegions: typeof maxRegions === "string" ? Number(maxRegions) : undefined,
+    ignoreRects,
     cache: args.flags.get("no-cache") === true ? undefined : new FileCacheStore(cacheDir()),
     provider: noVlm ? undefined : tryCreateProvider(args, json),
   });
@@ -124,6 +129,17 @@ function tryCreateProvider(args: ParsedArgs, json: boolean) {
     if (!json) console.error(`note: ${err instanceof Error ? err.message : String(err)}`);
     return undefined;
   }
+}
+
+/** Parse --ignore-rect "x,y,w,h;x,y,w,h" into rects. */
+function parseIgnoreRects(raw: string | boolean | undefined): Array<{ x: number; y: number; w: number; h: number }> | undefined {
+  if (typeof raw !== "string" || raw.trim() === "") return undefined;
+  const rects = raw.split(";").map((part) => {
+    const [x, y, w, h] = part.split(",").map(Number);
+    if ([x, y, w, h].some((n) => !Number.isFinite(n))) throw new Error(`--ignore-rect needs "x,y,w,h" segments, got "${part}"`);
+    return { x, y, w, h };
+  });
+  return rects.length > 0 ? rects : undefined;
 }
 
 /** One-line provenance summary: which DOM properties drove the description. */
@@ -338,9 +354,24 @@ async function runReviewCmd(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-async function runTrendsCmd(): Promise<number> {
+async function runTrendsCmd(args: ParsedArgs): Promise<number> {
   const root = findProjectRoot();
   try {
+    if (args.flags.get("suggest-ignores") === true) {
+      const { flakyPages, selectors } = await suggestIgnores(root);
+      if (flakyPages.length === 0) {
+        console.log("no flaky pages — nothing to mask");
+        return 0;
+      }
+      console.log(`flaky pages (flip ≥2×): ${flakyPages.join(", ")}`);
+      if (selectors.length > 0) {
+        console.log('suggested ignore selectors — review and add to .vlm-diff/config.json "ignore":');
+        for (const s of selectors) console.log(`  "${s}"`);
+      } else {
+        console.log("no id-carrying regions in the last check — inspect those pages' dynamic widgets");
+      }
+      return 0;
+    }
     const trends = await computeTrends(root);
     console.log(formatTrends(trends));
     return 0;
@@ -365,7 +396,7 @@ async function main(): Promise<number> {
   if (command === "baseline") return runBaselineCmd(args);
   if (command === "check") return runCheckCmd(args);
   if (command === "review") return runReviewCmd(args);
-  if (command === "trends") return runTrendsCmd();
+  if (command === "trends") return runTrendsCmd(args);
   console.error(`unknown command: ${command}\n\n` + usage());
   return 2;
 }

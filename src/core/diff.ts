@@ -24,6 +24,8 @@ export interface DiffOptions {
   cache?: CacheStore;
   pixelOnlyThreshold?: number;
   maxRegions?: number;
+  /** dynamic-content masks: regions inside these rects never count as changes */
+  ignoreRects?: Array<{ x: number; y: number; w: number; h: number }>;
 }
 
 /**
@@ -49,6 +51,8 @@ export interface RegionVerdict {
   h: number;
   source: CandidateRegion["source"];
   route: "deterministic" | "vlm";
+  /** DOM id of the changed element, when known (drives flaky→ignore suggestions) */
+  domId?: string;
   changeType?: ChangeKind;
   description?: string;
   confidence?: number;
@@ -101,7 +105,10 @@ export async function diffPair(
     domAfterJson ?? "[]",
     beforePng,
     afterPng,
-    { pixelOnlyThreshold: options.pixelOnlyThreshold ?? DEFAULT_PIXEL_ONLY_THRESHOLD },
+    {
+      pixelOnlyThreshold: options.pixelOnlyThreshold ?? DEFAULT_PIXEL_ONLY_THRESHOLD,
+      ignoreRects: options.ignoreRects,
+    },
   );
 
   const audit = {
@@ -147,6 +154,7 @@ export async function diffPair(
         x: region.x, y: region.y, w: region.w, h: region.h,
         source: region.source,
         route: "deterministic",
+        domId: region.domId,
         changeType: d.changeType,
         description: d.description,
         confidence: d.confidence,
@@ -183,6 +191,7 @@ export async function diffPair(
           description: c.description,
           confidence: c.confidence,
           rootCause: true, // pixel-only repaints are their own root cause
+          domId: srcRegion?.domId,
           severity: severityOfRegion({ changeType: c.changeType, w: c.region.w, h: c.region.h }),
           evidence: {
             domChangedFields: srcRegion?.domChangedFields,

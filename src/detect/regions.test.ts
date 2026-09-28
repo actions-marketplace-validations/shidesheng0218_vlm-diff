@@ -201,3 +201,36 @@ test("mergeNestedRegions: equal-rect regions don't loop or merge", () => {
   const merged = mergeNestedRegions([a, b]);
   assert.equal(merged.length, 2);
 });
+
+// ── v0.7 ignore regions (dynamic-content masks) ──
+
+test("detect: DOM change fully inside an ignore rect is dropped", () => {
+  const before = [node({ id: "ad", rect: { x: 10, y: 10, w: 20, h: 15 } })];
+  const after = [node({ id: "ad", rect: { x: 10, y: 10, w: 20, h: 15 }, style: { ...node().style, backgroundColor: "rgb(220,38,38)" } })];
+  const img = solidPng(60, 60, [255, 255, 255]);
+  const result = detect(JSON.stringify(before), JSON.stringify(after), img, img, {
+    ignoreRects: [{ x: 0, y: 0, w: 40, h: 30 }],
+  });
+  assert.equal(result.changed, false);
+  assert.equal(result.regions.length, 0);
+});
+
+test("detect: DOM change only partially overlapping an ignore rect is kept", () => {
+  const before = [node({ id: "ad", rect: { x: 10, y: 10, w: 20, h: 15 } })];
+  const after = [node({ id: "ad", rect: { x: 10, y: 10, w: 20, h: 15 }, style: { ...node().style, backgroundColor: "rgb(220,38,38)" } })];
+  const img = solidPng(60, 60, [255, 255, 255]);
+  const result = detect(JSON.stringify(before), JSON.stringify(after), img, img, {
+    ignoreRects: [{ x: 15, y: 10, w: 10, h: 15 }], // covers only the right half
+  });
+  assert.equal(result.changed, true);
+});
+
+test("detect: pixel delta inside an ignore rect never crosses the threshold", () => {
+  const dom = JSON.stringify([node()]);
+  const beforePng = solidPng(100, 100, [255, 255, 255]);
+  const afterPng = blockPng(100, 100, { x: 40, y: 40, w: 20, h: 20 }, [0, 0, 0]);
+  const result = detect(dom, dom, beforePng, afterPng, {
+    ignoreRects: [{ x: 35, y: 35, w: 30, h: 30 }],
+  });
+  assert.equal(result.changed, false);
+});

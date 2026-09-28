@@ -65,3 +65,39 @@ test("computeTrends: steady page is not flaky", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("suggestIgnores: flaky pages map their domIds to selectors", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vlm-diff-sug-"));
+  try {
+    await mkdir(join(dir, ".vlm-diff", "current"), { recursive: true });
+    await writeFile(join(dir, ".vlm-diff", "history.jsonl"), [
+      JSON.stringify({ ts: "t1", action: "check", pages: [{ name: "p", changed: true }] }),
+      JSON.stringify({ ts: "t2", action: "check", pages: [{ name: "p", changed: false }] }),
+      JSON.stringify({ ts: "t3", action: "check", pages: [{ name: "p", changed: true }] }),
+      JSON.stringify({ ts: "t4", action: "check", pages: [{ name: "p", changed: false }] }),
+    ].join("\n") + "\n");
+    await writeFile(join(dir, ".vlm-diff", "current", "last-check.json"), JSON.stringify({
+      at: "t4",
+      pages: [{ name: "p", changed: false, domIds: ["clock", "ad-slot"] }],
+    }));
+    const { suggestIgnores } = await import("./trends.js");
+    const out = await suggestIgnores(dir);
+    assert.deepEqual(out.flakyPages, ["p"]);
+    assert.deepEqual(out.selectors.sort(), ["#ad-slot", "#clock"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("suggestIgnores: steady project returns nothing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vlm-diff-sug-"));
+  try {
+    await mkdir(join(dir, ".vlm-diff"), { recursive: true });
+    await writeFile(join(dir, ".vlm-diff", "history.jsonl"), JSON.stringify({ ts: "t1", action: "check", pages: [{ name: "p", changed: false }] }) + "\n");
+    const { suggestIgnores } = await import("./trends.js");
+    const out = await suggestIgnores(dir);
+    assert.equal(out.flakyPages.length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

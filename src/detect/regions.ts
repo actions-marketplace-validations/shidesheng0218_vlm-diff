@@ -25,9 +25,23 @@ import { diffImages, groupRegions, maskBounds, type PixelRegion } from "./percep
  */
 export const DEFAULT_PIXEL_ONLY_THRESHOLD = 0.002;
 
+export interface IgnoreRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface DetectOptions {
   /** override DEFAULT_PIXEL_ONLY_THRESHOLD (fraction of frame pixels, 0–1) */
   pixelOnlyThreshold?: number;
+  /**
+   * Dynamic-content masks (Applitools-style ignore regions): DOM changes
+   * fully inside an ignore rect and pixel regions centered inside one are
+   * dropped before region construction — timestamps, ads, and carousels stop
+   * being false positives.
+   */
+  ignoreRects?: IgnoreRect[];
 }
 
 export interface CandidateRegion {
@@ -117,8 +131,32 @@ export function detect(
 ): DetectionResult {
   const domBefore = parseSnapshot(domBeforeJson);
   const domAfter = parseSnapshot(domAfterJson);
-  const domChanges: DomChange[] = diffDom(domBefore, domAfter);
-  const { mask, width, height, changedCount } = diffImages(beforePng, afterPng);
+  const ignoreRects = options?.ignoreRects ?? [];
+
+  const { mask, width, height, changedCount: rawChangedCount } = diffImages(beforePng, afterPng);
+
+  // dynamic-content masks: zero the mask inside ignore rects before any
+  // counting/grouping, so ignored areas don't even reach the noise threshold
+  let changedCount = rawChangedCount;
+  if (ignoreRects.length > 0) {
+    for (const ig of ignoreRects) {
+      const x0 = Math.max(0, ig.x);
+      const y0 = Math.max(0, ig.y);
+      const x1 = Math.min(width, ig.x + ig.w);
+      const y1 = Math.min(height, ig.y + ig.h);
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) mask[y * width + x] = 0;
+      }
+    }
+    changedCount = 0;
+    for (let i = 0; i < mask.length; i++) changedCount += mask[i];
+  }
+
+  // DOM changes fully inside an ignore rect are dropped too
+  const domChanges: DomChange[] = diffDom(domBefore, domAfter).filter(
+    (dc) => !ignoreRects.some((ig) => containsRect(ig, dc.rect)),
+  );
+
   const pixelRegions: PixelRegion[] = groupRegions(mask, width, height);
   const framePixels = width * height;
   const pixelChangedFraction = framePixels > 0 ? changedCount / framePixels : 0;
