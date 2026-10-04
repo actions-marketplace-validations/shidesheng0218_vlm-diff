@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node --test dist/**/*.test.js",
+    "test": "tsc && node scripts/run-tests.mjs",
     "postbuild": "node scripts/postbuild.mjs",
     "dataset:gen": "npm run build && node dist/dataset/generate.js",
     "eval:run": "npm run build && node dist/eval/run.js",
