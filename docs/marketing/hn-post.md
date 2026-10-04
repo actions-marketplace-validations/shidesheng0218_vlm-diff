@@ -1,3 +1,5 @@
+> **Data snapshot: v0.1 (39 pairs).** The numbers in this post (92% recall, 39 pairs) are from the initial release. Current figures: 193 pairs, 151/151 changed pairs detected with 0/42 false positives (offline replay), 97.1% of regions answered deterministically, 90.2% token reduction — see the README.
+
 # Hacker News Post
 
 ## Title

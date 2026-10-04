@@ -6,6 +6,8 @@ tags: webdev, testing, ai, opensource
 cover_image: https://dev-to-uploads.s3.amazonaws.com/uploads/articles/default-cover.png
 ---
 
+> **Data snapshot: v0.1 (39 pairs).** The numbers in this article (92% recall, 0% false positives, 39 pairs) are from the initial release. Current figures: 193 pairs, 151/151 changed pairs detected with 0/42 false positives (offline replay), 97.1% of regions answered deterministically, 90.2% token reduction — see the README.
+
 Hey Dev.to! I built a tool that combines DOM diffing with vision-language models (VLMs) for UI regression testing. Here's why and how.
 
 ## The Problem with Current Visual Regression Tools

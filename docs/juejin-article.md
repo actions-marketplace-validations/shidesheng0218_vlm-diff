@@ -1,5 +1,7 @@
 # 0 token 精准描述 99.3% 的 UI 变化：把 DOM 当 Ground Truth 用到底
 
+> **数据快照：145 对 / 611 区域版本** — 文中 "99.3%" 为该快照测量。最新全量（193 对 / 662 区域，results/router-replay.json）：97.1% 区域（643/662）零 token 确定性作答，区域升级率 2.9% — 以 README 为准。
+
 > 开源项目 vlm-diff：https://github.com/shidesheng0218/vlm-diff  
 > 英文版：https://dev.to/shidesheng/building-a-visual-regression-tool-with-vlms-and-dom-diffing-1j4m
 
