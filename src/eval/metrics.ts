@@ -40,10 +40,10 @@ export interface MetricsSummary {
   falsePositiveRateOnNoChange: number;
   /** among correctly-detected changed pairs, fraction with correct changeType (largest-region口径: BaselineResult.predictedChangeType) */
   changeTypeAccuracy: number;
-  /** per-region口径: across all classified regions on ground-truth-changed pairs, fraction whose changeType === pair.kind */
-  regionTypeRecall: number;
-  /** pair-level口径: among ground-truth-changed pairs predicted changed, fraction with at least one region typed correctly (can the user find the right answer in the report) */
-  pairContainsCorrectType: number;
+  /** per-region口径: across all classified regions on ground-truth-changed pairs, fraction whose changeType === pair.kind (omitted for arms without classifications) */
+  regionTypeRecall?: number;
+  /** pair-level口径: among ground-truth-changed pairs predicted changed, fraction with at least one region typed correctly (omitted for arms without classifications) */
+  pairContainsCorrectType?: number;
   avgInputTokens: number;
   avgOutputTokens: number;
   /** among classified regions, fraction that needed a VLM call (tieredPipeline only; undefined otherwise) */
@@ -131,8 +131,14 @@ export function summarize(pairs: PairRecord[], results: BaselineResult[]): Metri
       truePositives + noChangeFalsePositives > 0 ? truePositives / (truePositives + noChangeFalsePositives) : 0,
     falsePositiveRateOnNoChange: noChangePairs > 0 ? noChangeFalsePositives / noChangePairs : 0,
     changeTypeAccuracy: typeAttempts > 0 ? typeCorrect / typeAttempts : 0,
-    regionTypeRecall: regionTypeTotal > 0 ? regionTypeMatches / regionTypeTotal : 0,
-    pairContainsCorrectType: detectedChangedPairs > 0 ? pairsWithCorrectType / detectedChangedPairs : 0,
+    // arms without per-region detail (raw/pixel) omit these rather than
+    // reporting a misleading 0
+    ...(regionTypeTotal > 0
+      ? {
+          regionTypeRecall: regionTypeMatches / regionTypeTotal,
+          pairContainsCorrectType: detectedChangedPairs > 0 ? pairsWithCorrectType / detectedChangedPairs : 0,
+        }
+      : {}),
     avgInputTokens: results.length > 0 ? inputTokenSum / results.length : 0,
     avgOutputTokens: results.length > 0 ? outputTokenSum / results.length : 0,
     ...(routedRegions > 0

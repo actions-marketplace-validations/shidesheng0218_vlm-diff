@@ -82,3 +82,17 @@ test("docs-assert: wrong unit-test count is caught", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("docs-assert: missing dataset fails with a gate message, not a stack trace", async () => {
+  const root = await mkdtemp(join(tmpdir(), "vlm-diff-docs-"));
+  try {
+    await mkdir(join(root, "src"), { recursive: true });
+    await writeFile(join(root, "package.json"), JSON.stringify({ name: "vlm-diff", version: "0.7.0" }));
+    await writeFile(join(root, "README.md"), "placeholder");
+    // no data/dataset.json — the fresh-clone case (data/ is gitignored)
+    const errors = await runDocsAssert(root);
+    assert.ok(errors.some((e) => /dataset\.json/.test(e) && /dataset:gen/.test(e)), JSON.stringify(errors));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

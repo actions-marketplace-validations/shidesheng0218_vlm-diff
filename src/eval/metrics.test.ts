@@ -172,3 +172,11 @@ test("summarize: pairContainsCorrectType is 0 when no region matches, and 0 for 
   assert.equal(summary.pairContainsCorrectType, 0);
   assert.equal(summary.regionTypeRecall, 0); // 0/1 regions matched
 });
+
+test("summarize: region-level metrics are omitted (not 0) for arms without classifications", () => {
+  const pairs = [pair({ id: "p1", kind: "color-change" })];
+  const results = [result({ pairId: "p1", predictedChanged: true, predictedRegions: [{ x: 0, y: 0, w: 10, h: 10 }] })];
+  const summary = summarize(pairs, results);
+  assert.equal(summary.regionTypeRecall, undefined);
+  assert.equal(summary.pairContainsCorrectType, undefined);
+});

@@ -56,7 +56,9 @@ function formatVerdict(verdict: DiffVerdict): string {
 
 function tryProvider(providerName?: string, modelName?: string) {
   try {
-    return createProvider({ provider: providerName, model: modelName });
+    // the MCP server's VLM calls are the same high-volume per-region
+    // classification as the CLI's — route them through the cheap tier too
+    return createProvider({ provider: providerName, model: modelName, tier: "cheap" });
   } catch {
     return undefined; // no key configured — escalated regions stay pending
   }

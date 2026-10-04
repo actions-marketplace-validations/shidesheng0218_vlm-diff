@@ -114,7 +114,7 @@ test("InstrumentedProvider: in-flight calls reserve budget, so concurrent sends 
     };
     const messages = [{ role: "user" as const, content: [{ type: "text" as const, text: "hi" }] }];
     const opts = { maxTokens: 512 };
-    const reservation = estimateCallCostUsd("claude-sonnet-5", messages, opts);
+    const reservation = estimateCallCostUsd("claude-sonnet-5", "sys", messages, opts);
     // budget fits one reservation, not two
     const p = new InstrumentedProvider(slow, { logPath: join(dir, "l.jsonl"), budgetUsd: reservation * 1.5 });
     const settled = await Promise.allSettled([p.send("sys", messages, opts), p.send("sys", messages, opts)]);
@@ -127,4 +127,11 @@ test("InstrumentedProvider: in-flight calls reserve budget, so concurrent sends 
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("estimateCallCostUsd: includes the system prompt in the input estimate", () => {
+  const noSys = estimateCallCostUsd("claude-sonnet-5", "", [], { maxTokens: 0 });
+  const withSys = estimateCallCostUsd("claude-sonnet-5", "x".repeat(400), [], { maxTokens: 0 });
+  // 400 chars ≈ 100 tokens at $3/M input
+  assert.ok(Math.abs(withSys - noSys - (100 / 1e6) * 3) < 1e-12, `${withSys} - ${noSys}`);
 });

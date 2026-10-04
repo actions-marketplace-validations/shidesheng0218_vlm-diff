@@ -311,7 +311,7 @@ npm run demo:quick      # real algorithm on synthetic in-memory inputs (no keys)
 npm run demo:generate   # render 3 demo pairs with Playwright
 npm run demo:detect     # deterministic detection on them
 npm run dataset:gen     # regenerate the 193-pair dataset
-npm test                # 248 unit tests, zero API calls
+npm test                # 251 unit tests, zero API calls
 npm run eval:mvp        # four-arm live eval on the 51-pair subset (needs a key)
 npm run stats:report    # CIs + McNemar + bootstrap over any report
 npm run compare:models  # cross-model table from all reports

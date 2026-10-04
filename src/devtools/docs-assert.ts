@@ -47,16 +47,24 @@ export async function runDocsAssert(root: string): Promise<string[]> {
   const readme = await readText(root, "README.md");
   const quickstart = await readText(root, "QUICKSTART.md").catch(() => "");
   const pkg = JSON.parse(await readText(root, "package.json")) as { version: string };
-  const dataset = JSON.parse(await readText(root, "data/dataset.json")) as DatasetPair[];
+  // data/ is gitignored — a fresh clone (or CI without dataset:gen) has no
+  // dataset; report it as a gate failure with the fix, not a stack trace
+  const datasetJson = await readText(root, "data/dataset.json").catch(() => undefined);
+  if (datasetJson === undefined) {
+    errors.push("data/dataset.json: missing — run `npm run dataset:gen` first (the dataset is gitignored and generated locally)");
+  }
+  const dataset = (datasetJson !== undefined ? JSON.parse(datasetJson) : []) as DatasetPair[];
 
-  // dataset size
-  const n = String(dataset.length);
-  expectMatch(errors, "README pair benchmark", readme, /(\d+)-pair benchmark/, n);
-  expectMatch(errors, "README screenshot pairs", readme, /\*\*(\d+) screenshot pairs\*\*/, n);
+  if (datasetJson !== undefined) {
+    // dataset size
+    const n = String(dataset.length);
+    expectMatch(errors, "README pair benchmark", readme, /(\d+)-pair benchmark/, n);
+    expectMatch(errors, "README screenshot pairs", readme, /\*\*(\d+) screenshot pairs\*\*/, n);
 
-  // distinct mutation ids
-  const mutationIds = String(new Set(dataset.map((p) => p.mutationId)).size);
-  expectMatch(errors, "README mutation ids", readme, /(\d+) mutation ids/, mutationIds);
+    // distinct mutation ids
+    const mutationIds = String(new Set(dataset.map((p) => p.mutationId)).size);
+    expectMatch(errors, "README mutation ids", readme, /(\d+) mutation ids/, mutationIds);
+  }
 
   // version: action tags everywhere + the citation block
   const tag = `v${pkg.version}`;
