@@ -213,3 +213,31 @@ test("classifyRegionCached: different crops are separate cache entries", async (
   assert.equal(b.cached, false);
   assert.equal(provider.calls.length, 2);
 });
+
+test("classifyRegionCached: concurrent same-key calls share a single provider call", async () => {
+  let calls = 0;
+  const provider = {
+    name: "stub",
+    model: "stub-model",
+    async send() {
+      calls++;
+      await new Promise((r) => setTimeout(r, 30));
+      return { text: '{"changeType":"color-change","description":"d","confidence":0.9}', usage: { inputTokens: 10, outputTokens: 5 } };
+    },
+  };
+  const cache = new MemoryCacheStore();
+  const before = solidPng(20, 20, [255, 255, 255]);
+  const after = solidPng(20, 20, [200, 0, 0]);
+
+  const [a, b] = await Promise.all([
+    classifyRegionCached(provider, cache, before, after),
+    classifyRegionCached(provider, cache, before, after),
+  ]);
+
+  assert.equal(calls, 1); // the duplicate waited on the in-flight call
+  assert.equal(a.cached, false);
+  assert.equal(a.changeType, "color-change");
+  assert.equal(b.cached, true);
+  assert.equal(b.changeType, "color-change");
+  assert.equal(b.usage.inputTokens, 0); // the duplicate paid nothing
+});
