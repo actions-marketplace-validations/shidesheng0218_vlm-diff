@@ -27,7 +27,8 @@
     "judge:calibrate": "tsx scripts/judge-calibration.ts",
     "export:labels": "tsx scripts/export-training-data.ts",
     "eval:specialist": "tsx scripts/eval-specialist.ts",
-    "prepack": "node scripts/prepack.mjs"
+    "prepack": "node scripts/prepack.mjs",
+    "docs:assert": "tsx src/devtools/docs-assert.ts"
   },
   "engines": {
     "node": ">=20"
