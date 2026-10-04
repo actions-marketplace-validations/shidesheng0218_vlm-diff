@@ -360,7 +360,11 @@ export async function runTieredPipeline(
       classifications,
       inputTokens: classifications.reduce((s, c) => s + c.usage.inputTokens, 0),
       outputTokens: classifications.reduce((s, c) => s + c.usage.outputTokens, 0),
-      cached: cache ? vlmClassifications.every((c) => c.cached === true) : undefined,
+      cached: cache
+        ? vlmClassifications.length === 0
+          ? undefined // no VLM call happened — this pair has no cache concept; [].every() must not count as a hit
+          : vlmClassifications.every((c) => c.cached === true)
+        : undefined,
     },
     classifications,
     detection.visualOnly,

@@ -368,3 +368,64 @@ test("runFullPipeline: DOM-explained pair is never vetoed by an all-none VLM ver
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("runTieredPipeline: fully deterministic pair has no cache concept (cached === undefined)", async () => {
+  const provider = scriptedProvider([okTurn("other")]);
+  const cache = new MemoryCacheStore();
+  const before = new PNG({ width: 200, height: 200 });
+  fillRect(before, 0, 0, 200, 200, [255, 255, 255]);
+  const after = new PNG({ width: 200, height: 200 });
+  fillRect(after, 0, 0, 200, 200, [255, 255, 255]);
+  fillRect(after, 10, 10, 40, 40, [220, 38, 38]);
+
+  const { dataDir, pair } = await writePairFixture(before, after);
+  try {
+    const result = await runTieredPipeline(provider, pair, dataDir, cache);
+    assert.equal(provider.calls.length, 0); // no VLM call happened at all
+    assert.equal(result.cached, undefined); // NOT true — [].every() must not leak into cache accounting
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("runTieredPipeline: mixed cache hit/miss across escalated regions reports cached === false", async () => {
+  const provider = scriptedProvider([okTurn("color-change"), okTurn("color-change"), okTurn("color-change")]);
+  const cache = new MemoryCacheStore();
+
+  const makePair = async (squares: Array<[number, number, number, number]>, id: string) => {
+    const before = new PNG({ width: 200, height: 200 });
+    fillRect(before, 0, 0, 200, 200, [255, 255, 255]);
+    const after = new PNG({ width: 200, height: 200 });
+    fillRect(after, 0, 0, 200, 200, [255, 255, 255]);
+    for (const [x, y, w, h] of squares) fillRect(after, x, y, w, h, [37, 99, 235]);
+    const dataDir = await mkdtemp(join(tmpdir(), "vlm-diff-cache-"));
+    await writeFile(join(dataDir, "before.png"), PNG.sync.write(before));
+    await writeFile(join(dataDir, "after.png"), PNG.sync.write(after));
+    const pair: PairRecord = {
+      id,
+      fixture: "test.html",
+      mutationId: "canvas-repaint",
+      kind: "other",
+      magnitude: "large",
+      description: "pixel-only repaint",
+      before: "before.png",
+      after: "after.png",
+      domBefore: JSON.stringify([domNode("host")]),
+      domAfter: JSON.stringify([domNode("host")]),
+    };
+    return { dataDir, pair };
+  };
+
+  const a = await makePair([[70, 70, 60, 60]], "cache-warm");
+  const b = await makePair([[70, 70, 60, 60], [150, 150, 20, 20]], "cache-mixed");
+  try {
+    const warm = await runTieredPipeline(provider, a.pair, a.dataDir, cache);
+    assert.equal(warm.cached, false); // cold cache: the one escalated region missed
+    const mixed = await runTieredPipeline(provider, b.pair, b.dataDir, cache);
+    assert.equal(mixed.classifications!.filter((c) => c.route === "vlm").length, 2);
+    assert.equal(mixed.cached, false); // one hit + one miss → not a full hit
+  } finally {
+    await rm(a.dataDir, { recursive: true, force: true });
+    await rm(b.dataDir, { recursive: true, force: true });
+  }
+});
