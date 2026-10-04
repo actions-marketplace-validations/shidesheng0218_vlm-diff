@@ -149,8 +149,8 @@ export async function classifyDetectedRegions(
             }
           : undefined;
       const c: Classification & { cached?: boolean } = cache
-        ? await classifyRegionCached(provider, cache, cropRegion(before, region), cropRegion(after, region), hint)
-        : await classifyRegion(provider, cropRegion(before, region), cropRegion(after, region), hint);
+        ? await classifyRegionCached(provider, cache, cropRegion(before, region.counterpartRect ?? region), cropRegion(after, region), hint)
+        : await classifyRegion(provider, cropRegion(before, region.counterpartRect ?? region), cropRegion(after, region), hint);
       return {
         region: { x: region.x, y: region.y, w: region.w, h: region.h },
         source: region.source,

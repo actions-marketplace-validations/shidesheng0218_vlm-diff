@@ -429,3 +429,58 @@ test("runTieredPipeline: mixed cache hit/miss across escalated regions reports c
     await rm(b.dataDir, { recursive: true, force: true });
   }
 });
+
+function centerPixel(png: PNG): [number, number, number] {
+  const x = Math.floor(png.width / 2);
+  const y = Math.floor(png.height / 2);
+  const off = (y * png.width + x) * 4;
+  return [png.data[off], png.data[off + 1], png.data[off + 2]];
+}
+
+function removeFixture() {
+  // before: red block at (10,10,40,40) — the element that gets removed
+  const before = new PNG({ width: 200, height: 200 });
+  fillRect(before, 0, 0, 200, 200, [255, 255, 255]);
+  fillRect(before, 10, 10, 40, 40, [220, 38, 38]);
+  // after: the replacement sibling now occupies (50,50,40,40), painted blue
+  const after = new PNG({ width: 200, height: 200 });
+  fillRect(after, 0, 0, 200, 200, [255, 255, 255]);
+  fillRect(after, 50, 50, 40, 40, [37, 99, 235]);
+  const removedRegion = region(50, 50, 40, 40, {
+    domChangedFields: ["removed"],
+    domId: "card-3",
+    counterpartRect: { x: 10, y: 10, w: 40, h: 40 },
+  });
+  return { beforeBuf: PNG.sync.write(before), afterBuf: PNG.sync.write(after), removedRegion };
+}
+
+test("classifyDetectedRegions: element-remove crops the before frame at counterpartRect, not the replacement rect", async () => {
+  const provider = scriptedProvider([okTurn("element-remove")]);
+  const { beforeBuf, afterBuf, removedRegion } = removeFixture();
+
+  await classifyDetectedRegions(provider, undefined, beforeBuf, afterBuf, [removedRegion], true);
+
+  const images = provider.calls[0][0].content.filter((b) => b.type === "image");
+  const beforeCrop = PNG.sync.read(Buffer.from((images[0] as any).data, "base64"));
+  const afterCrop = PNG.sync.read(Buffer.from((images[1] as any).data, "base64"));
+  // before crop must show the REMOVED element (red), not whatever sits at the replacement rect in the before frame (white)
+  assert.deepEqual(centerPixel(beforeCrop), [220, 38, 38]);
+  assert.deepEqual(centerPixel(afterCrop), [37, 99, 235]);
+  // prompt still carries the lifecycle sentence
+  assert.match(provider.systems[0], /REMOVED/);
+});
+
+test("classifyDetectedRegions: counterpartRect changes the before crop pixels, so the cache key differs", async () => {
+  const provider = scriptedProvider([okTurn("element-remove"), okTurn("element-remove")]);
+  const cache = new MemoryCacheStore();
+  const { beforeBuf, afterBuf, removedRegion } = removeFixture();
+  // same rect, one with counterpartRect (before crop = removed element) and one
+  // without (before crop = replacement rect); useDomHint=false so only the
+  // crop pixels can distinguish the cache keys
+  const plain = region(50, 50, 40, 40);
+
+  await classifyDetectedRegions(provider, cache, beforeBuf, afterBuf, [removedRegion], false);
+  await classifyDetectedRegions(provider, cache, beforeBuf, afterBuf, [plain], false);
+
+  assert.equal(provider.calls.length, 2); // no false cache hit across different before crops
+});

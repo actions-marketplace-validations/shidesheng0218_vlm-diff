@@ -6,7 +6,6 @@
 
 import type { Provider } from "../provider/types.js";
 import { imageBlock, textBlock } from "../provider/types.js";
-import type { CandidateRegion } from "../detect/regions.js";
 import { PNG } from "pngjs";
 import type { CacheStore } from "../cache/store.js";
 import { computeCacheKey } from "../cache/key.js";
@@ -46,8 +45,9 @@ export interface Classification {
 
 const CROP_PADDING = 16;
 
-/** Crop a region (with padding) out of a full-frame PNG buffer. */
-export function cropRegion(pngBuffer: Buffer, region: CandidateRegion): Buffer {
+/** Crop a rect (with padding) out of a full-frame PNG buffer. Accepts any
+ *  {x,y,w,h} — callers pass a CandidateRegion or its counterpartRect. */
+export function cropRegion(pngBuffer: Buffer, region: { x: number; y: number; w: number; h: number }): Buffer {
   const src = PNG.sync.read(pngBuffer);
   // Regions can extend beyond the frame (e.g. a 1.35× scale pushes an element
   // partially off-viewport); clamp into bounds and never emit a 0-size crop.
