@@ -10,7 +10,8 @@ import { readFile } from "node:fs/promises";
 import { loadDotEnv } from "./env.js";
 import { parseArgs, type ParsedArgs } from "./args.js";
 import { diffPair, type DiffVerdict } from "../core/diff.js";
-import { createProvider, PRESETS } from "../provider/factory.js";
+import { PRESETS } from "../provider/factory.js";
+import { createCliProvider } from "./provider.js";
 import { FileCacheStore } from "../cache/store.js";
 import { cacheDir, findProjectRoot } from "./project.js";
 import { runInit, runBaseline, runCheck, checkExitCode, existingBaselinePages } from "./baseline.js";
@@ -121,7 +122,7 @@ function tryCreateProvider(args: ParsedArgs, json: boolean) {
   try {
     const provider = args.flags.get("provider");
     const model = args.flags.get("model");
-    return createProvider({
+    return createCliProvider({
       provider: typeof provider === "string" ? provider : undefined,
       model: typeof model === "string" ? model : undefined,
     });
