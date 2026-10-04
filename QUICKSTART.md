@@ -99,7 +99,7 @@ Two tools become available: `snapshot_url` (capture DOM + screenshot of a URL) a
 
 ## Next steps
 
-- **Gate PRs in CI**: add the composite action (`uses: shidesheng0218/vlm-diff@v0.6.0`) after committing `.vlm-diff/baseline/` — see the GitHub Action section in [README.md](README.md)
+- **Gate PRs in CI**: add the composite action (`uses: shidesheng0218/vlm-diff@v0.7.0`) after committing `.vlm-diff/baseline/` — see the GitHub Action section in [README.md](README.md)
 - **Evaluations & replication workflow** (datasets, the four-arm benchmark, stats): see [README.md](README.md)
 - **Full CLI reference**: `node dist/cli/main.js --help`
 - **Report issues**: https://github.com/shidesheng0218/vlm-diff/issues

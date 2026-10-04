@@ -142,7 +142,7 @@ Remaining DOM-layer limits: CSS animations mid-frame, cross-origin iframes, and 
 
 ## 📊 Results at a glance
 
-**193-pair benchmark** (7 fixtures × 31 mutation types, incl. pixel-only canvas/SVG/image pairs and 42 no-change pairs), four arms, real API calls. Detection: **151/151 changed pairs, 0/42 false positives** (95% CI on FP: [0%, 8.4%]).
+**193-pair benchmark** (7 fixtures × 37 mutation ids, incl. pixel-only canvas/SVG pairs and 42 no-change pairs). Detection layer — offline replay of the deterministic pipeline over all 193 pairs, **0 API calls** (`results/router-replay.json`): **151/151 changed pairs, 0/42 false positives** (95% CI on FP: [0%, 8.4%]). Four-arm live evals with **real API calls**: 36 pairs (2026-08-28, Kimi K3, $0.18) and 51 pairs (2026-09-02, qwen3.8-max, $1.36) — tables below.
 
 | Model | tiered: recall / FP / type-acc | tokens/pair | escalation | hint: type-acc | no-hint: type-acc | raw: recall / precision |
 |---|---|---|---|---|---|---|
@@ -150,6 +150,8 @@ Remaining DOM-layer limits: CSS animations mid-frame, cross-origin iframes, and 
 | **qwen3.8-max** (36 pairs) | 100% / 0% / **100%** | 9+17 | 1.3% | 90.0% | 90.0% | 83.3% / 24.0% |
 | **qwen3.8-max** (51 pairs, v0.2 subset) | 100% / 0% / **97.1%** [84.7%, 99.9%] | 112+131 | 18.7% | 91.2% | 85.3% | 85.3% / 37.9% |
 | **qwen3.7-flash** (51 pairs, weak model) | 100% / 0% / **91.2%** [76.3%, 98.1%] | 112+127 | 23.6% | 35.3% | 26.5% | **0%** / — |
+
+Full-dataset offline replay (193 pairs, 0 API calls, `results/router-replay.json`): 662 detected regions, **97.1% answered deterministically** (643/662, zero tokens), region escalation rate **2.9%** (19 regions across 7 pairs). The 1.3% escalation in the table above is the 36-pair minimal arm, not the full set.
 
 The weak-model row is the point: with a model whose raw full-image arm misses **every** changed pair (0% recall), the tiered pipeline still lands 100% recall and 91% type accuracy. **The robustness is architectural, not model-dependent.** A blind cross-vendor judge scores the zero-token templates on par with VLM descriptions (14/14/2, all bootstrap CIs straddling zero), and human calibration on all 30 judged pairs backs the aggregate read (66.7–80% per-pair agreement — judge is an aggregate instrument, not a per-pair one).
 
@@ -195,6 +197,8 @@ Four-arm protocol on the expanded 51-pair subset (34 changed — including all 4
 | **Avg tokens/pair** | 112+131 | 737+1734 | 646+1320 | 1116+742 |
 
 All 4 pixel-only media pairs classified correctly by the VLM tier; subset escalation 18.7% with **90.2%** token savings vs the hinted arm. The tiered arm's only type "miss" (`media-image-src-swap`) is a label-granularity artifact — the VLM wrote "the icon background changed from blue to red while the glyph and layout remained identical", factually correct, typed color-change vs ground truth `other`. McNemar: tiered vs raw recall 5/0 (p=0.063, same direction as v0.1's 7/0 at lower power).
+
+> Note (v0.9 docs sync): the `media-image-src-swap` narrative above records the v0.2 run. Since v0.6, `src` is a captured DOM attribute, so this pair is answered deterministically and no longer reaches the VLM tier at all (`results/router-replay.json`: kind `other`, 1 region, 0 VLM calls).
 
 ### Blind Judge: template vs VLM description quality
 
@@ -292,7 +296,7 @@ Two tools over stdio: `snapshot_url` (capture a URL's DOM snapshot + screenshot)
 ### GitHub Action (gate PRs on visual severity)
 
 ```yaml
-- uses: shidesheng0218/vlm-diff@v0.6.0
+- uses: shidesheng0218/vlm-diff@v0.7.0
   with:
     fail-on: breaking        # breaking | any | never
     # provider: dashscope    # optional — only needed for pixel-only escalation
@@ -319,7 +323,7 @@ npm run compare:models  # cross-model table from all reports
 
 Every provider is wrapped in an instrumented layer:
 
-- **Cost log** — every VLM call appends one JSON line to `.cache/cost-log.jsonl`: `{ts, fn, provider, model, tokens, latencyMs, costUsd, ok}`. Per-feature spend is answerable with `jq`.
+- **Cost log** — every VLM call appends one JSON line to `.cache/cost-log.jsonl`: `{ts, fn, provider, model, inputTokens, outputTokens, latencyMs, costUsd, ok}`. Per-feature spend is answerable with `jq`.
 - **Output caps** — per-call `maxTokens` (classification 512, judges/raw 1024).
 - **Budget gate** — `VLM_DIFF_BUDGET_USD=0.50` fails fast past the cap.
 - **Model routing (strictly opt-in)** — `VLM_DIFF_CLASSIFY_MODEL` sends high-volume classification to a cheaper tier; nothing routes unless set.
@@ -332,7 +336,7 @@ Every provider is wrapped in an instrumented layer:
 
 ## 🗂 Dataset
 
-**193 screenshot pairs** — 7 fixtures (card grid, form, navbar, table, modal, dashboard, and a media page with canvas/SVG/img widgets) × 31 mutation types. Detection: **151/151 changed pairs, 0/42 false positives** (FP CI [0%, 8.4%]).
+**193 screenshot pairs** — 7 fixtures (card grid, form, navbar, table, modal, dashboard, and a media page with canvas/SVG/img widgets) × 37 mutation ids. Detection (offline replay, 0 API calls): **151/151 changed pairs, 0/42 false positives** (FP CI [0%, 8.4%]).
 
 Each pair: before/after PNGs (960×500), DOM snapshots (path/tag/id/class/text/rect + 7 computed styles + whitelisted attributes), ground-truth rect, kind, and natural-language ground truth.
 
@@ -345,13 +349,15 @@ Each pair: before/after PNGs (960×500), DOM snapshots (path/tag/id/class/text/r
 | Color change (bg/text/border/contrast) | 31 | `#2563eb` → `#dc2626`; 5 contrast-degrade pairs (a11y) |
 | Size change (scale 0.9×–1.35×) | 25 | CSS transform scaling |
 | Text change (similar/different/shorten/numeric/alt) | 23 | "Project Falcon" → "Project Falcan"; alt removal (zero-pixel change) |
-| Element add / remove | 18 | clone or delete a card/row/button |
+| Element add | 6 | clone a card/row/button |
+| Element remove | 12 | delete a card/row/button |
 | Style change (weight/radius/shadow/opacity) | 22 | bold → normal, rounded → square |
-| Pixel-only (canvas ×2, SVG fill, image swap) | 4 | zero DOM signal — the VLM escalation path |
-| Other | 1 | — |
+| Other | 1 | image src swap (deterministic since v0.6 — `src` is a captured attribute) |
 | **No-change** | 42 | re-render / reload / settle-time variants |
 
-The v0.1 dataset was DOM-observable by construction (escalation circularity); the pixel-only category and the 42 no-change pairs fix the two biggest holes (the FP CI upper bound dropped from ≈46% at n=6 to ≈8% at n=42). Since v0.6, attribute changes (src/href/alt/aria) are captured, which moved the image-swap pair from the escalation path into the deterministic tier.
+Counts are by `kind` and sum to 193. "Pixel-only" is a cross-kind construction property (zero DOM signal: canvas ×2, SVG fill, image swap, shadow styles), not a `kind` — the canvas/SVG pairs still exercise the VLM escalation path; the image-swap pair left it in v0.6 when attribute capture landed.
+
+The v0.1 dataset was DOM-observable by construction (escalation circularity); the pixel-only pairs and the 42 no-change pairs fix the two biggest holes (the FP CI upper bound dropped from ≈46% at n=6 to ≈8% at n=42). Since v0.6, attribute changes (src/href/alt/aria) are captured, which moved the image-swap pair from the escalation path into the deterministic tier.
 
 </details>
 
@@ -389,7 +395,7 @@ Paper draft: [paper/vlm-diff.tex](paper/vlm-diff.tex) · writeups: [Dev.to](http
   author={shidesheng},
   year={2026},
   month={September},
-  version={0.6.0},
+  version={0.7.0},
   url={https://github.com/shidesheng0218/vlm-diff},
   note={Deterministic-first UI diffing with tiered VLM escalation: CLI, MCP server, dataset, and evaluation framework}
 }

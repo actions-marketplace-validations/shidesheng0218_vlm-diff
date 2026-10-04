@@ -31,7 +31,7 @@
 | **严重度分级** | 无 | 无 | 无 | 无 | **breaking/moderate/cosmetic**（0 token） |
 | **无障碍回归** | 无 | 无 | 无 | 无 | **WCAG 对比度 + alt/aria 删除检测（确定性）** |
 | **弱模型鲁棒性** | N/A | N/A | N/A | N/A | **实测验证**（弱模型 raw 0% 召回时，分层臂仍 100%/0%/91.2%） |
-| **成本（千次对比）** | $149–399/月 | $299–899/月 | $149–599/月 | 免费（自建） | **约 $1–5**（97% 区域零 token） |
+| **成本（千次对比）** | $149–399/月 | $299–899/月 | $149–599/月 | 免费（自建） | **约 $1–5**（97.1% 区域零 token，643/662，来源 results/router-replay.json） |
 | **成本可观测** | 订阅内不可见 | 同 | 同 | 无 | **每次调用记 fn/token/成本/延迟** |
 | **agent 原生** | 无 | MCP 只是接 Eyes 云的桥 | 无 | 无 | **本地 MCP = diff 引擎本身，图像+结构化返回** |
 | **CI/Action** | ✅ 成熟 | ✅ | ✅ | 部分 | ✅ composite Action（真实 PR 验证） |
@@ -42,7 +42,7 @@
 
 ## 三、只有我们能做的（护城河）
 
-1. **DOM 作 ground truth 的确定性层**：96.8% 区域的答案可证明正确（来自 DOM 计算样式，不是模型猜的）。
+1. **DOM 作 ground truth 的确定性层**：97.1% 区域的答案可证明正确（来自 DOM 计算样式，不是模型猜的；来源：results/router-replay.json，643/662 区域）。
 2. **evidence 贯穿**：每条描述带 DOM 字段与 before/after 原始值——可核查，不是可相信。
 3. **agent 验证闭环**：MCP 返回**结构化 verdict + 标注图 image 块**；Applitools 的 MCP 只是接它云服务的桥（`eyes_setup_project`/`eyes_fetch_visual_results` 这类），diff 仍发生在它家云端；我们本地、零遥测、确定性。
 4. **确定性无障碍层**：WCAG 对比度纯数学 + alt/aria 删除检测——视觉回归工具里没人做。
