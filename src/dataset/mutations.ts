@@ -473,7 +473,7 @@ export const V02_MUTATIONS: TargetedMutation[] = [
     kind: "other",
     magnitude: "large",
     targets: { "media.html": "#avatar" },
-    description: "image src swapped for a different graphic (src is not a captured DOM field)",
+    description: "image src swapped for a different graphic (deterministic since v0.6: src is a captured DOM attribute)",
     apply: (sel) => {
       const swapped =
         "data:image/svg+xml;utf8," +
