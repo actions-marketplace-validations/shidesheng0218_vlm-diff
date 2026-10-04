@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileCacheStore, MemoryCacheStore } from "./store.js";
+import { computeCacheKey } from "./key.js";
 import type { Classification } from "../classify/vlm-classify.js";
 
 function sampleClassification(): Classification {
@@ -58,6 +59,28 @@ test("FileCacheStore: missing file returns null, not a throw", async () => {
   try {
     const store = new FileCacheStore(dir);
     assert.equal(await store.get("never-written"), null);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("FileCacheStore: entry written under an old prompt version is a miss under the current one", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vlm-diff-cache-"));
+  try {
+    const store = new FileCacheStore(dir);
+    const before = Buffer.from([1, 2, 3]);
+    const after = Buffer.from([4, 5, 6]);
+    const oldKey = computeCacheKey(before, after, undefined, "m", "old-prompt");
+    await store.set(oldKey, {
+      classification: sampleClassification(),
+      cachedAt: new Date().toISOString(),
+      promptVersion: "old-prompt",
+    });
+    // lookup with the current (default) PROMPT_VERSION misses
+    assert.equal(await store.get(computeCacheKey(before, after, undefined, "m")), null);
+    // the audit field round-trips
+    const hit = await store.get(oldKey);
+    assert.equal(hit!.promptVersion, "old-prompt");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

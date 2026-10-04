@@ -8,7 +8,7 @@ import type { Provider } from "../provider/types.js";
 import { imageBlock, textBlock } from "../provider/types.js";
 import { PNG } from "pngjs";
 import type { CacheStore } from "../cache/store.js";
-import { computeCacheKey } from "../cache/key.js";
+import { computeCacheKey, PROMPT_VERSION } from "../cache/key.js";
 import { extractJson } from "../util/json.js";
 
 export type ChangeKind =
@@ -187,7 +187,7 @@ export async function classifyRegionCached(
   }
 
   const result = await classifyRegion(provider, beforeCrop, afterCrop, hint);
-  await cache.set(key, { classification: result, cachedAt: new Date().toISOString() });
+  await cache.set(key, { classification: result, cachedAt: new Date().toISOString(), promptVersion: PROMPT_VERSION });
   return { ...result, cached: false };
 }
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeCacheKey } from "./key.js";
+import { computeCacheKey, PROMPT_VERSION } from "./key.js";
 
 test("computeCacheKey: identical inputs produce the same key", () => {
   const before = Buffer.from([1, 2, 3]);
@@ -44,4 +44,17 @@ test("computeCacheKey: model context changes the key (no cross-model cache poiso
   const none = computeCacheKey(before, after);
   assert.notEqual(kimi, qwen);
   assert.notEqual(kimi, none);
+});
+
+test("computeCacheKey: prompt version changes the key for identical inputs", () => {
+  const before = Buffer.from([1, 2, 3]);
+  const after = Buffer.from([4, 5, 6]);
+  const v1 = computeCacheKey(before, after, undefined, "m", "prompt-v1");
+  const v2 = computeCacheKey(before, after, undefined, "m", "prompt-v2");
+  assert.notEqual(v1, v2);
+  // the default is the current PROMPT_VERSION
+  assert.equal(
+    computeCacheKey(before, after, undefined, "m"),
+    computeCacheKey(before, after, undefined, "m", PROMPT_VERSION),
+  );
 });

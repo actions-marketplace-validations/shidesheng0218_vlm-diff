@@ -9,6 +9,8 @@ import type { Classification } from "../classify/vlm-classify.js";
 export interface CacheEntry {
   classification: Classification;
   cachedAt: string;
+  /** PROMPT_VERSION at write time, for auditing which prompt produced this entry */
+  promptVersion?: string;
 }
 
 export interface CacheStore {
