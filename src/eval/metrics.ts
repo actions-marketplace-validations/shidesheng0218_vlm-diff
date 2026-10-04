@@ -38,8 +38,12 @@ export interface MetricsSummary {
   detectionPrecision: number;
   /** ground-truth "none" pairs incorrectly flagged as changed */
   falsePositiveRateOnNoChange: number;
-  /** among correctly-detected changed pairs, fraction with correct changeType */
+  /** among correctly-detected changed pairs, fraction with correct changeType (largest-region口径: BaselineResult.predictedChangeType) */
   changeTypeAccuracy: number;
+  /** per-region口径: across all classified regions on ground-truth-changed pairs, fraction whose changeType === pair.kind */
+  regionTypeRecall: number;
+  /** pair-level口径: among ground-truth-changed pairs predicted changed, fraction with at least one region typed correctly (can the user find the right answer in the report) */
+  pairContainsCorrectType: number;
   avgInputTokens: number;
   avgOutputTokens: number;
   /** among classified regions, fraction that needed a VLM call (tieredPipeline only; undefined otherwise) */
@@ -60,6 +64,10 @@ export function summarize(pairs: PairRecord[], results: BaselineResult[]): Metri
   let precisionAttempts = 0; // predicted-changed pairs where ground truth also changed (denominator for localizationHitRate)
   let typeCorrect = 0;
   let typeAttempts = 0;
+  let regionTypeMatches = 0;
+  let regionTypeTotal = 0;
+  let pairsWithCorrectType = 0;
+  let detectedChangedPairs = 0; // ground-truth-changed pairs predicted changed (denominator for pairContainsCorrectType)
   let inputTokenSum = 0;
   let outputTokenSum = 0;
   let routedRegions = 0;
@@ -87,6 +95,7 @@ export function summarize(pairs: PairRecord[], results: BaselineResult[]): Metri
     if (r.predictedChanged) {
       truePositives++;
       precisionAttempts++;
+      detectedChangedPairs++;
       const gtRect = groundTruthRect(pair);
       if (gtRect && r.predictedRegions.some((pr) => iou(pr, gtRect) >= IOU_HIT_THRESHOLD)) {
         precisionHits++;
@@ -95,6 +104,15 @@ export function summarize(pairs: PairRecord[], results: BaselineResult[]): Metri
         typeAttempts++;
         if (r.predictedChangeType === pair.kind) typeCorrect++;
       }
+      let pairHasCorrectType = false;
+      for (const c of r.classifications ?? []) {
+        regionTypeTotal++;
+        if (c.changeType === pair.kind) {
+          regionTypeMatches++;
+          pairHasCorrectType = true;
+        }
+      }
+      if (pairHasCorrectType) pairsWithCorrectType++;
     } else {
       falseNegatives++;
     }
@@ -113,6 +131,8 @@ export function summarize(pairs: PairRecord[], results: BaselineResult[]): Metri
       truePositives + noChangeFalsePositives > 0 ? truePositives / (truePositives + noChangeFalsePositives) : 0,
     falsePositiveRateOnNoChange: noChangePairs > 0 ? noChangeFalsePositives / noChangePairs : 0,
     changeTypeAccuracy: typeAttempts > 0 ? typeCorrect / typeAttempts : 0,
+    regionTypeRecall: regionTypeTotal > 0 ? regionTypeMatches / regionTypeTotal : 0,
+    pairContainsCorrectType: detectedChangedPairs > 0 ? pairsWithCorrectType / detectedChangedPairs : 0,
     avgInputTokens: results.length > 0 ? inputTokenSum / results.length : 0,
     avgOutputTokens: results.length > 0 ? outputTokenSum / results.length : 0,
     ...(routedRegions > 0

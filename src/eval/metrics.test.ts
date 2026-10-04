@@ -112,3 +112,63 @@ test("summarize: localizationHitRate keeps the old precision semantics (IoU >= 0
   assert.equal(summary.localizationHitRate, 0);
   assert.equal(summary.detectionPrecision, 1); // no false positives here
 });
+
+function region(changeType: string) {
+  return {
+    region: { x: 0, y: 0, w: 10, h: 10 },
+    source: "pixel",
+    changeType,
+    description: "d",
+    confidence: 0.9,
+    usage: { inputTokens: 0, outputTokens: 0 },
+  } as any;
+}
+
+test("summarize: regionTypeRecall counts every classified region, not just the largest", () => {
+  const pairs = [pair({ id: "p1", kind: "size-change" })];
+  const results = [
+    result({
+      pairId: "p1",
+      predictedChanged: true,
+      predictedRegions: [{ x: 0, y: 0, w: 10, h: 10 }],
+      predictedChangeType: "spatial-shift" as any,
+      classifications: [region("spatial-shift"), region("size-change"), region("size-change")],
+    }),
+  ];
+  const summary = summarize(pairs, results);
+  assert.equal(summary.regionTypeRecall, 2 / 3);
+});
+
+test("summarize: pairContainsCorrectType is 1 when any region matches the ground truth kind", () => {
+  const pairs = [pair({ id: "p1", kind: "size-change" })];
+  const results = [
+    result({
+      pairId: "p1",
+      predictedChanged: true,
+      predictedRegions: [{ x: 0, y: 0, w: 10, h: 10 }],
+      predictedChangeType: "spatial-shift" as any,
+      classifications: [region("spatial-shift"), region("size-change"), region("size-change")],
+    }),
+  ];
+  const summary = summarize(pairs, results);
+  assert.equal(summary.pairContainsCorrectType, 1);
+  // largest-region口径 stays untouched: the max region was judged wrong
+  assert.equal(summary.changeTypeAccuracy, 0);
+});
+
+test("summarize: pairContainsCorrectType is 0 when no region matches, and 0 for pairs with no classifications", () => {
+  const pairs = [pair({ id: "p1", kind: "size-change" }), pair({ id: "p2", kind: "color-change" })];
+  const results = [
+    result({
+      pairId: "p1",
+      predictedChanged: true,
+      predictedRegions: [{ x: 0, y: 0, w: 10, h: 10 }],
+      predictedChangeType: "spatial-shift" as any,
+      classifications: [region("spatial-shift")],
+    }),
+    result({ pairId: "p2", predictedChanged: true, predictedRegions: [{ x: 0, y: 0, w: 5, h: 5 }], classifications: [] }),
+  ];
+  const summary = summarize(pairs, results);
+  assert.equal(summary.pairContainsCorrectType, 0);
+  assert.equal(summary.regionTypeRecall, 0); // 0/1 regions matched
+});
