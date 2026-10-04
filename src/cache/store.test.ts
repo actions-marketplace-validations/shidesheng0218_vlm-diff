@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileCacheStore, MemoryCacheStore } from "./store.js";
@@ -81,6 +81,29 @@ test("FileCacheStore: entry written under an old prompt version is a miss under 
     // the audit field round-trips
     const hit = await store.get(oldKey);
     assert.equal(hit!.promptVersion, "old-prompt");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("FileCacheStore: corrupt JSON degrades to a miss instead of throwing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vlm-diff-cache-"));
+  try {
+    await writeFile(join(dir, "corrupt.json"), "{not json");
+    const store = new FileCacheStore(dir);
+    assert.equal(await store.get("corrupt"), null);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("FileCacheStore: set writes via temp+rename, leaving no partial files", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vlm-diff-cache-"));
+  try {
+    const store = new FileCacheStore(dir);
+    await store.set("key1", { classification: sampleClassification(), cachedAt: new Date().toISOString() });
+    const files = await readdir(dir);
+    assert.deepEqual(files, ["key1.json"]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

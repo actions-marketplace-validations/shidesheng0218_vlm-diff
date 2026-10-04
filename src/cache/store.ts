@@ -2,7 +2,7 @@
 // implementation is the only backend today; the interface exists so a
 // Redis/S3-backed store can be swapped in later without touching call sites.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Classification } from "../classify/vlm-classify.js";
 
@@ -39,13 +39,20 @@ export class FileCacheStore implements CacheStore {
       return entry;
     } catch (err: any) {
       if (err.code === "ENOENT") return null;
+      // a truncated/corrupt entry (e.g. a killed write) is a miss, not a crash
+      if (err instanceof SyntaxError) return null;
       throw err;
     }
   }
 
+  private static tmpCounter = 0;
+
   async set(key: string, entry: CacheEntry): Promise<void> {
     await mkdir(this.cacheDir, { recursive: true });
-    await writeFile(this.pathFor(key), JSON.stringify(entry, null, 2));
+    // temp file + rename: readers never see a half-written entry
+    const tmp = `${this.pathFor(key)}.tmp-${process.pid}-${FileCacheStore.tmpCounter++}`;
+    await writeFile(tmp, JSON.stringify(entry, null, 2));
+    await rename(tmp, this.pathFor(key));
   }
 }
 

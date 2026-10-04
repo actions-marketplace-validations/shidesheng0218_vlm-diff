@@ -168,6 +168,10 @@ export async function classifyRegion(
  * before/after crop pixels skip the VLM call entirely and return the
  * previously stored classification with zero token usage.
  */
+/** Same-key calls in flight — concurrent duplicates await the shared promise
+ *  instead of each paying for their own API call. */
+const inFlight = new Map<string, Promise<Classification>>();
+
 export async function classifyRegionCached(
   provider: Provider,
   cache: CacheStore,
@@ -186,9 +190,21 @@ export async function classifyRegionCached(
     return { ...hit.classification, usage: { inputTokens: 0, outputTokens: 0 }, cached: true };
   }
 
-  const result = await classifyRegion(provider, beforeCrop, afterCrop, hint);
-  await cache.set(key, { classification: result, cachedAt: new Date().toISOString(), promptVersion: PROMPT_VERSION });
-  return { ...result, cached: false };
+  const pending = inFlight.get(key);
+  if (pending) {
+    const shared = await pending;
+    return { ...shared, usage: { inputTokens: 0, outputTokens: 0 }, cached: true };
+  }
+
+  const call = classifyRegion(provider, beforeCrop, afterCrop, hint);
+  inFlight.set(key, call);
+  try {
+    const result = await call;
+    await cache.set(key, { classification: result, cachedAt: new Date().toISOString(), promptVersion: PROMPT_VERSION });
+    return { ...result, cached: false };
+  } finally {
+    inFlight.delete(key);
+  }
 }
 
 export function parseClassification(text: string): Omit<Classification, "usage"> {
