@@ -20,7 +20,10 @@ interface MvpReport {
     {
       metrics: {
         recall: number;
-        precision: number;
+        /** @deprecated alias of localizationHitRate in older reports */
+        precision?: number;
+        localizationHitRate: number;
+        detectionPrecision: number;
         falsePositiveRateOnNoChange: number;
         changeTypeAccuracy: number;
         avgInputTokens: number;
@@ -91,11 +94,11 @@ async function main() {
       `| ${t.avgInputTokens.toFixed(0)}+${t.avgOutputTokens.toFixed(0)} ` +
       `| ${esc !== undefined ? pct(esc) : "n/a"} ` +
       `| ${pct(h.changeTypeAccuracy)} | ${pct(nh.changeTypeAccuracy)} ` +
-      `| ${pct(raw.recall)} / ${pct(raw.precision)} |`;
+      `| ${pct(raw.recall)} / ${pct(raw.localizationHitRate)} / ${pct(raw.detectionPrecision)} |`;
     md.push(row);
     console.log(row);
   }
-  console.log("\nKey columns: tiered type accuracy is exact-match vs ground truth; escalation is the fraction of regions sent to the VLM; raw precision is IoU≥0.3 localization accuracy.");
+  console.log("\nKey columns: tiered type accuracy is exact-match vs ground truth; escalation is the fraction of regions sent to the VLM; raw columns are recall / IoU≥0.3 localization hit rate / detection precision (TP/(TP+FP)).");
 }
 
 main().catch((err) => {

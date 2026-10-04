@@ -26,8 +26,16 @@ export interface MetricsSummary {
   n: number;
   /** ground-truth-changed pairs correctly flagged as changed */
   recall: number;
-  /** predicted-changed pairs whose region overlaps ground truth (IoU > 0.3) */
+  /**
+   * @deprecated misleading name — this never counted false positives.
+   * Use localizationHitRate (same value) or detectionPrecision (TP / (TP+FP)).
+   * Kept so existing consumers/tests keep compiling; removed in a future major.
+   */
   precision: number;
+  /** predicted-changed pairs whose region overlaps ground truth (IoU > 0.3); the old `precision` semantics */
+  localizationHitRate: number;
+  /** TP / (TP + FP), where FP = predictedChanged on a ground-truth "none" pair */
+  detectionPrecision: number;
   /** ground-truth "none" pairs incorrectly flagged as changed */
   falsePositiveRateOnNoChange: number;
   /** among correctly-detected changed pairs, fraction with correct changeType */
@@ -49,7 +57,7 @@ export function summarize(pairs: PairRecord[], results: BaselineResult[]): Metri
   let noChangePairs = 0;
   let noChangeFalsePositives = 0;
   let precisionHits = 0;
-  let precisionAttempts = 0; // predicted-changed pairs where ground truth also changed (denominator for region precision)
+  let precisionAttempts = 0; // predicted-changed pairs where ground truth also changed (denominator for localizationHitRate)
   let typeCorrect = 0;
   let typeAttempts = 0;
   let inputTokenSum = 0;
@@ -93,12 +101,16 @@ export function summarize(pairs: PairRecord[], results: BaselineResult[]): Metri
   }
 
   const changedTotal = truePositives + falseNegatives;
+  const localizationHitRate = precisionAttempts > 0 ? precisionHits / precisionAttempts : 0;
 
   return {
     baseline,
     n: results.length,
     recall: changedTotal > 0 ? truePositives / changedTotal : 0,
-    precision: precisionAttempts > 0 ? precisionHits / precisionAttempts : 0,
+    precision: localizationHitRate,
+    localizationHitRate,
+    detectionPrecision:
+      truePositives + noChangeFalsePositives > 0 ? truePositives / (truePositives + noChangeFalsePositives) : 0,
     falsePositiveRateOnNoChange: noChangePairs > 0 ? noChangeFalsePositives / noChangePairs : 0,
     changeTypeAccuracy: typeAttempts > 0 ? typeCorrect / typeAttempts : 0,
     avgInputTokens: results.length > 0 ? inputTokenSum / results.length : 0,
