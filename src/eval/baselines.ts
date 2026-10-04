@@ -15,6 +15,7 @@ import { diffImages, groupRegions } from "../detect/perceptual-diff.js";
 import { classifyRegion, classifyRegionCached, cropRegion } from "../classify/vlm-classify.js";
 import type { ChangeKind, Classification, DomHint } from "../classify/vlm-classify.js";
 import { describeRegions } from "../describe/describe.js";
+import { mapWithConcurrency } from "../util/pool.js";
 import type { CacheStore } from "../cache/store.js";
 import { extractJson } from "../util/json.js";
 import type { PairRecord } from "./types.js";
@@ -124,10 +125,21 @@ export async function runPixelDiffOnly(pair: PairRecord, dataDir: string): Promi
  *  of DOM changes; classify the largest regions first and stop here. */
 export const MAX_REGIONS_TO_CLASSIFY = 8;
 
+/** Cap on concurrent classification calls — unbounded Promise.all tripped
+ *  rate limits on 8-region pairs. Matches the judge pool's default. */
+export const CLASSIFY_CONCURRENCY = 4;
+
+function classifyConcurrency(): number {
+  const raw = process.env.VLM_DIFF_CLASSIFY_CONCURRENCY;
+  const n = raw !== undefined && raw !== "" ? Number(raw) : NaN;
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : CLASSIFY_CONCURRENCY;
+}
+
 /**
- * Classify every detected region in parallel, largest first. Each region gets
- * its own crop and (when available) its own DOM-field hint, so a pair with
- * several changed elements produces one classification per element.
+ * Classify detected regions with a bounded concurrency pool, largest first
+ * (order preserved). Each region gets its own crop and (when available) its
+ * own DOM-field hint, so a pair with several changed elements produces one
+ * classification per element.
  */
 export async function classifyDetectedRegions(
   provider: Provider,
@@ -139,32 +151,30 @@ export async function classifyDetectedRegions(
   maxRegions: number = MAX_REGIONS_TO_CLASSIFY,
 ): Promise<RegionClassification[]> {
   const sorted = [...regions].sort((a, b) => b.w * b.h - a.w * a.h).slice(0, maxRegions);
-  return Promise.all(
-    sorted.map(async (region) => {
-      const hint: DomHint | undefined =
-        useDomHint && region.domChangedFields && region.domChangedFields.length > 0
-          ? {
-              fields: region.domChangedFields,
-              id: region.domId,
-              ...(region.rectDelta ? { rectDelta: region.rectDelta } : {}),
-              ...(region.counterpartRect ? { counterpartRect: region.counterpartRect } : {}),
-            }
-          : undefined;
-      const c: Classification & { cached?: boolean } = cache
-        ? await classifyRegionCached(provider, cache, cropRegion(before, region.counterpartRect ?? region), cropRegion(after, region), hint)
-        : await classifyRegion(provider, cropRegion(before, region.counterpartRect ?? region), cropRegion(after, region), hint);
-      return {
-        region: { x: region.x, y: region.y, w: region.w, h: region.h },
-        source: region.source,
-        changeType: c.changeType,
-        description: c.description,
-        confidence: c.confidence,
-        usage: c.usage,
-        model: provider.model,
-        cached: c.cached,
-      };
-    }),
-  );
+  return mapWithConcurrency(sorted, classifyConcurrency(), async (region) => {
+    const hint: DomHint | undefined =
+      useDomHint && region.domChangedFields && region.domChangedFields.length > 0
+        ? {
+            fields: region.domChangedFields,
+            id: region.domId,
+            ...(region.rectDelta ? { rectDelta: region.rectDelta } : {}),
+            ...(region.counterpartRect ? { counterpartRect: region.counterpartRect } : {}),
+          }
+        : undefined;
+    const c: Classification & { cached?: boolean } = cache
+      ? await classifyRegionCached(provider, cache, cropRegion(before, region.counterpartRect ?? region), cropRegion(after, region), hint)
+      : await classifyRegion(provider, cropRegion(before, region.counterpartRect ?? region), cropRegion(after, region), hint);
+    return {
+      region: { x: region.x, y: region.y, w: region.w, h: region.h },
+      source: region.source,
+      changeType: c.changeType,
+      description: c.description,
+      confidence: c.confidence,
+      usage: c.usage,
+      model: provider.model,
+      cached: c.cached,
+    };
+  });
 }
 
 /**

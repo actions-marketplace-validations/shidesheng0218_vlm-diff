@@ -484,3 +484,53 @@ test("classifyDetectedRegions: counterpartRect changes the before crop pixels, s
 
   assert.equal(provider.calls.length, 2); // no false cache hit across different before crops
 });
+
+function trackingProvider(delayMs: number) {
+  let inflight = 0;
+  let peak = 0;
+  const provider = {
+    name: "stub",
+    model: "stub-model",
+    peak: () => peak,
+    async send() {
+      inflight++;
+      peak = Math.max(peak, inflight);
+      await new Promise((r) => setTimeout(r, delayMs));
+      inflight--;
+      return { text: '{"changeType":"color-change","description":"d","confidence":0.9}', usage: { inputTokens: 10, outputTokens: 5 } };
+    },
+  };
+  return provider;
+}
+
+const eightRegions = () =>
+  Array.from({ length: 8 }, (_, i) => region(i * 20, i * 20, 15, 15));
+
+test("classifyDetectedRegions: concurrency is capped (default 4) instead of unbounded Promise.all", async () => {
+  const provider = trackingProvider(20);
+  const before = solidPng(200, 200, [255, 255, 255]);
+  const after = solidPng(200, 200, [200, 200, 200]);
+
+  const results = await classifyDetectedRegions(provider as any, undefined, before, after, eightRegions(), true);
+
+  assert.equal(results.length, 8);
+  assert.ok(provider.peak() <= 4, `peak concurrency ${provider.peak()} exceeds the default cap of 4`);
+  assert.ok(provider.peak() > 1, "expected some parallelism, got a serial run");
+});
+
+test("classifyDetectedRegions: VLM_DIFF_CLASSIFY_CONCURRENCY overrides the cap", async () => {
+  const saved = process.env.VLM_DIFF_CLASSIFY_CONCURRENCY;
+  process.env.VLM_DIFF_CLASSIFY_CONCURRENCY = "2";
+  try {
+    const provider = trackingProvider(20);
+    const before = solidPng(200, 200, [255, 255, 255]);
+    const after = solidPng(200, 200, [200, 200, 200]);
+
+    await classifyDetectedRegions(provider as any, undefined, before, after, eightRegions(), true);
+
+    assert.ok(provider.peak() <= 2, `peak concurrency ${provider.peak()} exceeds the env cap of 2`);
+  } finally {
+    if (saved === undefined) delete process.env.VLM_DIFF_CLASSIFY_CONCURRENCY;
+    else process.env.VLM_DIFF_CLASSIFY_CONCURRENCY = saved;
+  }
+});
