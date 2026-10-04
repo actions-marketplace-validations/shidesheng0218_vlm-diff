@@ -8,13 +8,34 @@
 // - passes SendOpts (fn label, maxTokens) through to the inner provider
 
 import type { Msg, Provider, SendOpts, TurnResult } from "./types.js";
-import { estimateCostUsd } from "../cost/pricing.js";
+import { estimateGateCostUsd } from "../cost/pricing.js";
 import { appendCostLog } from "../cost/log.js";
+
+/** Rough per-image vision token cost used for pre-call budget reservations. */
+const IMAGE_TOKEN_ESTIMATE = 1500;
+
+/**
+ * Pre-call cost ceiling used for budget reservations. Input tokens aren't
+ * known until the response comes back, so estimate: ~4 chars/token for text,
+ * a fixed tile cost per image, and the caller's maxTokens cap for output.
+ * Exported for tests.
+ */
+export function estimateCallCostUsd(model: string, messages: Msg[], opts?: SendOpts): number {
+  let inputTokens = 0;
+  for (const m of messages) {
+    for (const block of m.content) {
+      if (block.type === "text") inputTokens += Math.ceil(block.text.length / 4);
+      else inputTokens += IMAGE_TOKEN_ESTIMATE;
+    }
+  }
+  return estimateGateCostUsd(model, { inputTokens, outputTokens: opts?.maxTokens ?? 1024 });
+}
 
 export class InstrumentedProvider implements Provider {
   readonly name: string;
   readonly model: string;
   private spentUsd = 0;
+  private reservedUsd = 0;
 
   constructor(
     private readonly inner: Provider,
@@ -37,18 +58,25 @@ export class InstrumentedProvider implements Provider {
 
   async send(system: string, messages: Msg[], opts?: SendOpts): Promise<TurnResult> {
     const budget = this.budgetUsd();
-    if (budget !== undefined && this.spentUsd >= budget) {
+    // Reserve an estimated ceiling BEFORE the call: in-flight concurrent
+    // calls count against the budget, so N parallel sends can't all pass the
+    // gate and overspend. Settled against the real cost on success, released
+    // on failure.
+    const reservation = estimateCallCostUsd(this.model, messages, opts);
+    if (budget !== undefined && this.spentUsd + this.reservedUsd + reservation > budget) {
       throw new Error(
-        `Budget exceeded: $${this.spentUsd.toFixed(4)} already spent of the $${budget} budget (VLM_DIFF_BUDGET_USD). ` +
+        `Budget exceeded: $${this.spentUsd.toFixed(4)} already spent (plus $${this.reservedUsd.toFixed(4)} in flight) of the $${budget} budget (VLM_DIFF_BUDGET_USD). ` +
           `Raise the budget or rerun fewer pairs.`,
       );
     }
 
     const t0 = Date.now();
     const fn = opts?.fn ?? "send";
+    this.reservedUsd += reservation;
     try {
       const result = await this.inner.send(system, messages, opts);
-      const costUsd = estimateCostUsd(this.model, result.usage);
+      const costUsd = estimateGateCostUsd(this.model, result.usage);
+      this.reservedUsd -= reservation;
       this.spentUsd += costUsd;
       await appendCostLog(
         {
@@ -66,6 +94,7 @@ export class InstrumentedProvider implements Provider {
       );
       return result;
     } catch (err) {
+      this.reservedUsd -= reservation;
       await appendCostLog(
         {
           ts: new Date().toISOString(),
