@@ -28,6 +28,8 @@ export interface RegionClassification {
   description: string;
   confidence: number;
   usage: { inputTokens: number; outputTokens: number };
+  /** model that produced this classification (provider.model at call time) — the report layer prices each region by this, not by the primary provider */
+  model?: string;
   cached?: boolean;
   /** how this region's description was produced (tieredPipeline only) */
   route?: "deterministic" | "vlm";
@@ -158,6 +160,7 @@ export async function classifyDetectedRegions(
         description: c.description,
         confidence: c.confidence,
         usage: c.usage,
+        model: provider.model,
         cached: c.cached,
       };
     }),

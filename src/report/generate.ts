@@ -31,6 +31,23 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
+/**
+ * Cost of one BaselineResult. When per-region classifications exist, each
+ * region is priced by the model that actually classified it (cheap-tier
+ * routing means that is often NOT the report's primary model); arms without
+ * per-region detail (rawPairToVlm) fall back to pair-level tokens priced by
+ * the primary model. Cache-hit regions carry zeroed usage, so they bill $0.
+ */
+export function estimateResultCostUsd(r: BaselineResult, fallbackModel: string): number {
+  if (r.classifications && r.classifications.length > 0) {
+    return r.classifications.reduce(
+      (sum, c) => sum + estimateCostUsd(c.model ?? fallbackModel, c.usage),
+      0,
+    );
+  }
+  return estimateCostUsd(fallbackModel, { inputTokens: r.inputTokens, outputTokens: r.outputTokens });
+}
+
 export function computeReportSummary(input: ReportInput): ReportSummary {
   const { pairs, results, provider } = input;
   const byId = new Map(pairs.map((p) => [p.id, p]));
@@ -55,9 +72,9 @@ export function computeReportSummary(input: ReportInput): ReportSummary {
       // using the average non-cached cost for this baseline instead.
     } else if (r.cached === false) {
       cacheMisses++;
-      totalCostUsd += estimateCostUsd(provider.model, { inputTokens: r.inputTokens, outputTokens: r.outputTokens });
+      totalCostUsd += estimateResultCostUsd(r, provider.model);
     } else {
-      totalCostUsd += estimateCostUsd(provider.model, { inputTokens: r.inputTokens, outputTokens: r.outputTokens });
+      totalCostUsd += estimateResultCostUsd(r, provider.model);
     }
   }
 
@@ -105,7 +122,7 @@ export async function generateHtmlReport(input: ReportInput, dataDir: string): P
       const cacheLabel =
         r.cached === true ? `<span class="badge badge-hit">cache hit</span>` :
         r.cached === false ? `<span class="badge badge-miss">cache miss</span>` : "";
-      const cost = estimateCostUsd(provider.model, { inputTokens: r.inputTokens, outputTokens: r.outputTokens });
+      const cost = estimateResultCostUsd(r, provider.model);
 
       return `
         <div class="pair-card">
