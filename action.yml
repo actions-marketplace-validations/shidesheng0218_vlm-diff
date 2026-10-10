@@ -1,8 +1,5 @@
 name: "VLM-Diff Visual Check"
-description: >-
-  Verify UI changes against golden baselines. Deterministic-first detection
-  (zero tokens for DOM-explained changes), severity tiers (breaking/moderate/
-  cosmetic), annotated HTML reports, and DOM evidence for every description.
+description: "Verify UI changes against golden baselines. Zero tokens for DOM changes; VLM only for pixel-only regions."
 author: "shidesheng0218"
 branding:
   icon: "eye"
