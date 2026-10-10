@@ -296,7 +296,7 @@ Two tools over stdio: `snapshot_url` (capture a URL's DOM snapshot + screenshot)
 ### GitHub Action (gate PRs on visual severity)
 
 ```yaml
-- uses: shidesheng0218/vlm-diff@v0.7.0
+- uses: shidesheng0218/vlm-diff@v0.9.0
   with:
     fail-on: breaking        # breaking | any | never
     # provider: dashscope    # optional — only needed for pixel-only escalation
@@ -394,8 +394,8 @@ Paper draft: [paper/vlm-diff.tex](paper/vlm-diff.tex) · writeups: [Dev.to](http
   title={VLM-Diff: Visual Regression Detection with Structural Ground Truth},
   author={shidesheng},
   year={2026},
-  month={September},
-  version={0.7.0},
+  month={October},
+  version={0.9.0},
   url={https://github.com/shidesheng0218/vlm-diff},
   note={Deterministic-first UI diffing with tiered VLM escalation: CLI, MCP server, dataset, and evaluation framework}
 }
@@ -418,6 +418,7 @@ Paper draft: [paper/vlm-diff.tex](paper/vlm-diff.tex) · writeups: [Dev.to](http
 <details>
 <summary><b>Release history</b></summary>
 
+- **v0.9** — trustworthy numbers: corrected detection precision + region-level type scoring, prompt-versioned cache, cost parity and budget-gate fixes, docs-number gate in CI
 - **v0.7** — Playwright SDK (`vlm-diff/playwright`), ignore regions for dynamic content, scenario actions + viewport matrix, flaky→ignore suggestions
 - **v0.6** — attribute-aware capture (image swaps/link targets now deterministic), deterministic a11y (WCAG contrast + alt/aria), `review` + `trends` workflow
 - **v0.5** — agent verifier: MCP image blocks + structuredContent, GitHub Action, `check --json/--report`

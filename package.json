@@ -1,6 +1,6 @@
 {
   "name": "vlm-diff",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "description": "The visual verifier for agentic coding workflows — deterministic-first UI screenshot diffing (DOM+pixel), tiered descriptions, CLI, MCP server, GitHub Action",
   "type": "module",
   "bin": {

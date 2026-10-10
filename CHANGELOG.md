@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.9.0] — 2026-10-10
+
+The "make the numbers trustworthy" release — a correctness audit of the metrics, cost and cache layers. No new surface area; the goal was making the existing claims stand up.
+
+### Metrics correctness
+
+- **`detectionPrecision` split from `localizationHitRate`** (`src/eval/metrics.ts`): the old `precision` never counted false positives — predicted-changed no-change pairs were excluded from the denominator, so it read `0.8235` identically for the raw and tiered arms. `detectionPrecision = TP/(TP+FP)` with FP = predictedChanged ∧ kind none; the old metric is renamed to what it actually measures (does the detected region land on the ground-truth box, IoU ≥ 0.3).
+- **Region-level type scoring** (`regionTypeRecall`): multi-region pairs are scored per detected region instead of only the largest one (`table-element-add` detects 8 regions and previously scored 1). `changeTypeAccuracy` keeps its largest-region semantics and is labeled as such.
+- **Deterministic-only pairs no longer count as cache hits** (`[].every()` on an empty classification list returned true, inflating hit counts and the money-saved estimate).
+- **`element-remove` crops the before frame at `counterpartRect`** so the before crop shows the removed element itself and the prompt matches the image.
+- **Cache keys include `PROMPT_VERSION` ("p1")**: editing the system prompt now invalidates old conclusions instead of serving them for up to 7 days. Entries carry a `promptVersion` audit field; entries from other prompt versions degrade to a miss.
+
+### Cost & routing
+
+- CLI classification routes through the cheap tier via `VLM_DIFF_CLASSIFY_MODEL` (strictly opt-in, unchanged).
+- Report costs are billed by the model that actually classified each region (per-region `model` field); cache-hit regions bill zero. Previously every region was priced at the primary provider's model — ~3.75× overstatement under Haiku classification.
+- The budget gate works for unpriced models: a conservative fallback price (`VLM_DIFF_DEFAULT_PRICE` or the table's highest) replaces the silent $0, and in-flight calls reserve budget so concurrent sends cannot overspend. Pricing table gains `qwen3.8-flash`, `glm-5.2`, `minimax-m3` (marked as estimates).
+
+### Docs & gates
+
+- `npm run docs:assert` pins README/QUICKSTART numbers — test counts, action tags, citation version, dataset size, mutation ids — to their sources (dataset, package.json, the test suite), and runs in CI's replay-gate job.
+- README no longer merges the 193-pair offline replay with live-API claims; full-set figures (662 regions, 97.1% deterministic, 2.9% escalation) are separated from the small live arm; action tags/citation/roadmap synced; the four marketing posts carry data-snapshot banners.
+
+### Robustness
+
+- Classification concurrency is bounded (`VLM_DIFF_CLASSIFY_CONCURRENCY`, default 4).
+- Cache writes are atomic (temp+rename), corrupt entries degrade to a miss, and identical in-flight classifications dedupe to one API call.
+- `npm test` fails on an empty suite instead of going silently green.
+
+Tests: 217 → 251.
+
 ## [0.7.0] — 2026-09-20
 
 The "absorb the competitors' best ideas" release.
