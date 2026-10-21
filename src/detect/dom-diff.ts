@@ -17,10 +17,30 @@ export interface DomNode {
     opacity: string;
     boxShadow: string;
     border: string;
+    /** present since v0.10 (layout invariants); absent in older snapshots */
+    display?: string;
+    visibility?: string;
+    overflowX?: string;
+    overflowY?: string;
+    textOverflow?: string;
   };
+  /** content-box metrics, present since v0.10; absent in older snapshots */
+  box?: {
+    scrollWidth: number;
+    scrollHeight: number;
+    clientWidth: number;
+    clientHeight: number;
+  };
+  /** <input> type, captured outside `attrs` so pre-v0.10 baselines don't diff on it */
+  inputType?: string;
   /** whitelisted HTML attributes (src, href, alt, aria-label, …); absent in pre-0.6 snapshots */
   attrs?: Record<string, string>;
 }
+
+/** Computed styles the structural diff compares. The v0.10 layout-only fields
+ *  (display/overflow/…) are deliberately excluded: they are captured for the
+ *  invariants checker, not for regression diffing. */
+type DiffedStyleKey = "color" | "backgroundColor" | "fontWeight" | "borderRadius" | "opacity" | "boxShadow" | "border";
 
 export interface RectDelta {
   dx: number;
@@ -82,7 +102,7 @@ function compareNodes(b: DomNode, a: DomNode): { changedFields: string[]; values
     rectDelta = rectDeltaOf(b.rect, a.rect);
     changedFields.push(...rectDeltaFields(rectDelta));
   }
-  const styleFields: Array<keyof DomNode["style"]> = [
+  const styleFields: DiffedStyleKey[] = [
     "color", "backgroundColor", "fontWeight", "borderRadius", "opacity", "boxShadow", "border",
   ];
   if (b.text !== a.text) {

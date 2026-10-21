@@ -17,6 +17,7 @@ import { cacheDir, findProjectRoot } from "./project.js";
 import { runInit, runBaseline, runCheck, checkExitCode, existingBaselinePages } from "./baseline.js";
 import { loadPendingReview, approvePages, recordReview, reviewInteractive, type ReviewOutcome } from "./review.js";
 import { computeTrends, formatTrends, suggestIgnores } from "./trends.js";
+import { runAudit } from "./audit.js";
 
 function usage(): string {
   return `vlm-diff — deterministic-first UI screenshot diffing
@@ -24,6 +25,10 @@ function usage(): string {
 Usage:
   vlm-diff diff <before.png> <after.png> [options]
   vlm-diff snapshot <url-or-file> --out-dom <file.json> [--out-png <file.png>] [options]
+  vlm-diff audit <dom.json> [--png <shot.png>] [--diag <diag.json>] [--json]
+  vlm-diff audit --url <url> [--width <px>] [--height <px>] [--wait-ms <ms>] [--json]
+                            zero-baseline check: clipped content, collapsed elements,
+                            unreachable/undersized controls, console + network errors
   vlm-diff init [url]       create .vlm-diff/config.json (optionally seeded with a page)
   vlm-diff baseline         snapshot every configured page into .vlm-diff/baseline/
                             (overwriting an existing baseline requires --yes)
@@ -202,16 +207,20 @@ async function runSnapshot(args: ParsedArgs): Promise<number> {
   const outPng = args.flags.get("out-png");
 
   const { chromium } = await import("playwright");
-  const { snapshotDom } = await import("../snapshot/capture.js");
+  const { snapshotDom, collectDiagnostics } = await import("../snapshot/capture.js");
   const { writeFile } = await import("node:fs/promises");
 
   const url = target.startsWith("http://") || target.startsWith("https://") || target.startsWith("file://")
     ? target
     : `file://${target.startsWith("/") ? target : `${process.cwd()}/${target}`}`;
 
+  const outDiag = args.flags.get("out-diag");
+
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width, height } });
+    // attach before navigation so load-time console errors / failed requests are recorded
+    const collector = collectDiagnostics(page);
     await page.goto(url, { waitUntil: "load" });
     await page.waitForTimeout(waitMs);
     const dom = await snapshotDom(page);
@@ -220,6 +229,15 @@ async function runSnapshot(args: ParsedArgs): Promise<number> {
     if (typeof outPng === "string") {
       await page.screenshot({ path: outPng });
       console.log(`Screenshot:   ${outPng}`);
+    }
+    if (typeof outDiag === "string") {
+      const diag = collector.finish();
+      await writeFile(outDiag, JSON.stringify(diag, null, 2));
+      const s = diag.summary;
+      console.log(
+        `Diagnostics:  ${outDiag} (${s.pageErrors} exceptions, ${s.consoleErrors} console errors, ` +
+          `${s.failedRequests} failed requests, ${s.httpErrors} http errors)`,
+      );
     }
     return 0;
   } finally {
@@ -393,6 +411,7 @@ async function main(): Promise<number> {
   }
   if (command === "diff") return runDiff(args);
   if (command === "snapshot") return runSnapshot(args);
+  if (command === "audit") return runAudit(args);
   if (command === "init") return runInitCmd(args);
   if (command === "baseline") return runBaselineCmd(args);
   if (command === "check") return runCheckCmd(args);

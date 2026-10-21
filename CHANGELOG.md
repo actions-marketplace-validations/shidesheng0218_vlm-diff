@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Zero-baseline audit (`vlm-diff audit`)
+
+The first check in the tool that needs **no baseline, no previous run and no API key** — it judges a single frame, which makes it the lowest-friction entry point ("is my page broken right now?") and the one check a coding agent can call before it has any history.
+
+- **`src/core/invariants.ts`** — five high-precision rules over one DOM snapshot: `collapsed` (visible content in a zero-size box), `text-truncated` (ellipsis configured *and* the text actually overflows), `content-overflow` (clipped rather than scrollable), `offscreen-interactive` (a control the user cannot reach — breaking), `small-target` (below the WCAG 2.2 AA 24×24 minimum; prose links and checkbox/radio inputs are exempt by design).
+- **`vlm-diff audit <dom.json> --png <shot.png>`** for offline checks and **`vlm-diff audit --url <url>`** to capture and check in one command. Exit codes match the CLI: 0 clean, 1 findings, 2 error.
+- **Console / network diagnostics** (`collectDiagnostics` in `src/snapshot/capture.ts`): console errors and warnings (deduped with occurrence counts), uncaught exceptions, failed requests and HTTP ≥400 responses. `vlm-diff snapshot` gains `--out-diag <file>`; `audit --diag <file>` includes them in the report. A page that threw or failed a request exits 1 even when the layout is structurally clean.
+- Snapshot gains `display`/`visibility`/`overflowX`/`overflowY`/`textOverflow`, content-box metrics and `inputType`. All additive: pre-0.10 snapshots parse unchanged and simply skip the rules that need the new fields. `inputType` is deliberately kept out of the `attrs` whitelist — folding it in would make every `<input>` look attribute-changed against existing baselines.
+
 ## [0.9.0] — 2026-10-10
 
 The "make the numbers trustworthy" release — a correctness audit of the metrics, cost and cache layers. No new surface area; the goal was making the existing claims stand up.
