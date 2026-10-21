@@ -244,6 +244,32 @@ See the [quick start](#-30-second-quick-start). Reference highlights:
 - `--report <file.html>` writes the shareable annotated report shown above.
 - API keys come from the environment or a local `.env`; `--provider`/`--model` override the preset.
 
+### Audit a page with no baseline
+
+Every other command compares two frames. `audit` judges **one** frame, so it needs no baseline, no previous run and no API key — the check an agent can call before any history exists:
+
+```bash
+vlm-diff audit --url http://localhost:3000/          # capture + check in one command
+vlm-diff audit page.dom.json --png page.png --diag page.diag.json   # offline
+```
+
+```
+⚠️  AUDIT — 5 findings (1 breaking, 4 moderate) in http://localhost:3000/
+
+  breaking  button.far-right    interactive element extends 176px past the right edge of the viewport — unreachable
+  moderate  button.tiny         interactive target is 80×18px, below the 24×24 minimum (WCAG 2.5.8)
+  moderate  div.card            text clipped by 326px (ellipsis)
+  moderate  div.clipped         content overflows vertically by 78px and is clipped (overflow-y: hidden)
+  moderate  div.collapsed       element collapsed to 1248×0px — its content renders in zero space
+
+Page diagnostics:
+  console errors: 2
+    boom: failed to load pricing module  ×2
+    Fetch API cannot load /api/items
+```
+
+Rules are deliberately narrow (a false positive in an audit costs more than a missed edge case): `collapsed`, `text-truncated` (ellipsis configured **and** the text actually overflows), `content-overflow` (clipped, not scrollable), `offscreen-interactive`, and `small-target` — prose links and checkbox/radio inputs are exempt. Console errors, uncaught exceptions, failed requests and HTTP ≥400 are captured by `snapshot --out-diag` and reported alongside; a page that threw exits 1 even when the layout is structurally clean.
+
 ### Baseline workflow (watch a project over time)
 
 ```bash
@@ -311,7 +337,7 @@ npm run demo:quick      # real algorithm on synthetic in-memory inputs (no keys)
 npm run demo:generate   # render 3 demo pairs with Playwright
 npm run demo:detect     # deterministic detection on them
 npm run dataset:gen     # regenerate the 193-pair dataset
-npm test                # 251 unit tests, zero API calls
+npm test                # 269 unit tests, zero API calls
 npm run eval:mvp        # four-arm live eval on the 51-pair subset (needs a key)
 npm run stats:report    # CIs + McNemar + bootstrap over any report
 npm run compare:models  # cross-model table from all reports

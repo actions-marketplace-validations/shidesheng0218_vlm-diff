@@ -12,7 +12,7 @@ export interface ParsedArgs {
 const VALUE_FLAGS = new Set([
   "dom-before", "dom-after", "provider", "model", "threshold", "max-regions",
   "report", "out-dom", "out-png", "width", "height", "wait-ms", "approve",
-  "ignore-rect",
+  "ignore-rect", "url", "png", "diag", "out-diag",
 ]);
 
 export function parseArgs(argv: string[]): ParsedArgs {
