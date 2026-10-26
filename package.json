@@ -28,7 +28,8 @@
     "export:labels": "tsx scripts/export-training-data.ts",
     "eval:specialist": "tsx scripts/eval-specialist.ts",
     "prepack": "node scripts/prepack.mjs",
-    "docs:assert": "tsx src/devtools/docs-assert.ts"
+    "docs:assert": "tsx src/devtools/docs-assert.ts",
+    "bakeoff": "tsx scripts/percy-bakeoff.ts"
   },
   "engines": {
     "node": ">=20"
