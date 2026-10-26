@@ -36,3 +36,6 @@ test-results/
 
 # Editor session state (ZCode CLI)
 .zcode/
+
+# Percy bakeoff artifacts (regenerate with: npm run bakeoff)
+bakeoff/
