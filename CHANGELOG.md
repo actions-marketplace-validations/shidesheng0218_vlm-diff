@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### CSS cause attribution (`vlm-diff why`)
+
+`diff` says the background went blue → red; `why` says **which rule now wins and what else could have set it** — the step from a regression report to a diagnosis, and the piece that lets an agent go fix the code instead of guessing.
+
+- **`src/core/css-cause.ts`** — reads the page's stylesheets via CSSOM, collects every declaration that could set a property on the element, ranks by `!important` → specificity → source order, and names the winner plus the losing contenders with the reason each lost. Pure string/DOM analysis, zero tokens.
+- **`vlm-diff why <url> --selector <css> --property <prop>`** — runs against the live page and prints the winning rule, the computed value, and the override chain (e.g. `#save (1,0,0) → background-color: green · overrode: .btn--danger (red), .btn (blue)`).
+- Example output: `#save · background-color = rgb(0,128,0) — caused by: #save ((1,0,0)) → background-color: green`.
+
 ### Zero-baseline audit (`vlm-diff audit`)
 
 The first check in the tool that needs **no baseline, no previous run and no API key** — it judges a single frame, which makes it the lowest-friction entry point ("is my page broken right now?") and the one check a coding agent can call before it has any history.

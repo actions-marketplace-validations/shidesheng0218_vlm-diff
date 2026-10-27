@@ -270,6 +270,23 @@ Page diagnostics:
 
 Rules are deliberately narrow (a false positive in an audit costs more than a missed edge case): `collapsed`, `text-truncated` (ellipsis configured **and** the text actually overflows), `content-overflow` (clipped, not scrollable), `offscreen-interactive`, and `small-target` — prose links and checkbox/radio inputs are exempt. Console errors, uncaught exceptions, failed requests and HTTP ≥400 are captured by `snapshot --out-diag` and reported alongside; a page that threw exits 1 even when the layout is structurally clean.
 
+### Why did this style change? (`vlm-diff why`)
+
+`diff` tells you the background went blue → red. `why` tells you **which CSS rule now wins** and what else could have set it — the difference between a report and a diagnosis, and the piece that lets an agent go fix the code instead of guessing:
+
+```bash
+vlm-diff why http://localhost:3000 --selector "#save" --property background-color
+```
+
+```
+#save · background-color = rgb(0, 128, 0)
+  winning rule: caused by: #save ((1,0,0)) → background-color: green · overrode: .btn--danger (background-color: red), .btn (background-color: blue)
+    contender: .btn--danger (0,1,0) background-color: red — loses on specificity
+    contender: .btn (0,1,0) background-color: blue — loses on specificity
+```
+
+Pure CSSOM read-back — zero tokens, no VLM, runs against the live page. `diff` answers *what*; `why` answers *which rule*.
+
 ### Baseline workflow (watch a project over time)
 
 ```bash
@@ -337,7 +354,7 @@ npm run demo:quick      # real algorithm on synthetic in-memory inputs (no keys)
 npm run demo:generate   # render 3 demo pairs with Playwright
 npm run demo:detect     # deterministic detection on them
 npm run dataset:gen     # regenerate the 193-pair dataset
-npm test                # 269 unit tests, zero API calls
+npm test                # 277 unit tests, zero API calls
 npm run eval:mvp        # four-arm live eval on the 51-pair subset (needs a key)
 npm run stats:report    # CIs + McNemar + bootstrap over any report
 npm run compare:models  # cross-model table from all reports
