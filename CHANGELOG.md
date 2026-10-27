@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Citation accuracy + WUICC-bench positioning
+
+A literature check (the three cited arXiv papers fetched and read) found the project was *under*-claiming its relationship to the closest prior work and *over*-claiming specifics we couldn't verify from the sources:
+
+- **WUICC-bench (arXiv:2607.01728) is the closest prior work** — it defines web-UI change captioning and evaluates 11 IDC methods + 2 zero-shot LLMs, finding they all struggle on web UIs (layout diversity, dense text, fine-grained changes). Crucially, **none of them uses DOM structure** — exactly the signal we exploit. README gains a "Relationship to WUICC-bench" section making this the headline positioning instead of a passing reference; the paper's related-work paragraph now says this explicitly.
+- **Removed unverifiable specifics**: the exact accuracy figures (77.8% / 62.6% / 59.9%), the "concatenation hurt 9/10 categories" claim, the "6×" OmniDiff multiplier, and the "13K pairs" dataset size are not confirmable from the papers' abstracts and were restated as what the abstracts do support (VLMs lag humans on subtle differences; specialists beat general VLMs; WUICC methods struggle on web UI). The figures may be in the full PDFs — restore them only with a page/table citation.
+
+### CSS cause attribution (`vlm-diff why`)
+
+`diff` says the background went blue → red; `why` says **which rule now wins and what else could have set it** — the step from a regression report to a diagnosis, and the piece that lets an agent go fix the code instead of guessing.
+
+- **`src/core/css-cause.ts`** — reads the page's stylesheets via CSSOM, collects every declaration that could set a property on the element, ranks by `!important` → specificity → source order, and names the winner plus the losing contenders with the reason each lost. Pure string/DOM analysis, zero tokens.
+- **`vlm-diff why <url> --selector <css> --property <prop>`** — runs against the live page and prints the winning rule, the computed value, and the override chain (e.g. `#save (1,0,0) → background-color: green · overrode: .btn--danger (red), .btn (blue)`).
+- Example output: `#save · background-color = rgb(0,128,0) — caused by: #save ((1,0,0)) → background-color: green`.
+
 ### Zero-baseline audit (`vlm-diff audit`)
 
 The first check in the tool that needs **no baseline, no previous run and no API key** — it judges a single frame, which makes it the lowest-friction entry point ("is my page broken right now?") and the one check a coding agent can call before it has any history.

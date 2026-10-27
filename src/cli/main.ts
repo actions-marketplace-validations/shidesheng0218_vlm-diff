@@ -18,6 +18,7 @@ import { runInit, runBaseline, runCheck, checkExitCode, existingBaselinePages } 
 import { loadPendingReview, approvePages, recordReview, reviewInteractive, type ReviewOutcome } from "./review.js";
 import { computeTrends, formatTrends, suggestIgnores } from "./trends.js";
 import { runAudit } from "./audit.js";
+import { runWhy } from "./why.js";
 
 function usage(): string {
   return `vlm-diff — deterministic-first UI screenshot diffing
@@ -29,6 +30,9 @@ Usage:
   vlm-diff audit --url <url> [--width <px>] [--height <px>] [--wait-ms <ms>] [--json]
                             zero-baseline check: clipped content, collapsed elements,
                             unreachable/undersized controls, console + network errors
+  vlm-diff why <url> --selector <css> --property <css-prop> [--json]
+                            CSS cause attribution: which rule wins, what else could
+                            set it, and why (zero tokens, live page)
   vlm-diff init [url]       create .vlm-diff/config.json (optionally seeded with a page)
   vlm-diff baseline         snapshot every configured page into .vlm-diff/baseline/
                             (overwriting an existing baseline requires --yes)
@@ -412,6 +416,7 @@ async function main(): Promise<number> {
   if (command === "diff") return runDiff(args);
   if (command === "snapshot") return runSnapshot(args);
   if (command === "audit") return runAudit(args);
+  if (command === "why") return runWhy(args);
   if (command === "init") return runInitCmd(args);
   if (command === "baseline") return runBaselineCmd(args);
   if (command === "check") return runCheckCmd(args);

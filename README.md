@@ -132,7 +132,7 @@ graph TB
 
 **v0.3 structural upgrades.** Fuzzy DOM matching pairs nodes by stable key (unique `id`, else unique `tag|className|text`) so list reorders/head-inserts no longer fan out into phantom regions; semantic merging collapses a card and its children moving together into one logical change; deterministic severity tiers (`breaking` for element lifecycle + numeric text, `moderate` for large geometry/copy, `cosmetic` for color/style).
 
-**Why crop-then-classify?** VLM-SubtleBench showed concatenating before/after hurts 9/10 categories; our own ablation showed plain crops lose the reference frame (56.7% conditional accuracy on Kimi without the DOM-field hint). The fix: pass the detector's changed fields as a ~50-token text prior — 83–90% recovered, and the tiered describer makes most regions free.
+**Why crop-then-classify?** Feeding VLMs near-identical full images is a known weakness (VLM-SubtleBench: models lag humans on subtle differences across 10 categories, spatial worst). Our own ablation showed plain crops lose the reference frame (56.7% conditional accuracy on Kimi without the DOM-field hint). The fix: pass the detector's changed fields as a ~50-token text prior — 83–90% recovered, and the tiered describer makes most regions free.
 
 Remaining DOM-layer limits: CSS animations mid-frame, cross-origin iframes, and deltas below pixelmatch's own sensitivity (~0.15 YIQ) are invisible by construction.
 
@@ -270,6 +270,23 @@ Page diagnostics:
 
 Rules are deliberately narrow (a false positive in an audit costs more than a missed edge case): `collapsed`, `text-truncated` (ellipsis configured **and** the text actually overflows), `content-overflow` (clipped, not scrollable), `offscreen-interactive`, and `small-target` — prose links and checkbox/radio inputs are exempt. Console errors, uncaught exceptions, failed requests and HTTP ≥400 are captured by `snapshot --out-diag` and reported alongside; a page that threw exits 1 even when the layout is structurally clean.
 
+### Why did this style change? (`vlm-diff why`)
+
+`diff` tells you the background went blue → red. `why` tells you **which CSS rule now wins** and what else could have set it — the difference between a report and a diagnosis, and the piece that lets an agent go fix the code instead of guessing:
+
+```bash
+vlm-diff why http://localhost:3000 --selector "#save" --property background-color
+```
+
+```
+#save · background-color = rgb(0, 128, 0)
+  winning rule: caused by: #save ((1,0,0)) → background-color: green · overrode: .btn--danger (background-color: red), .btn (background-color: blue)
+    contender: .btn--danger (0,1,0) background-color: red — loses on specificity
+    contender: .btn (0,1,0) background-color: blue — loses on specificity
+```
+
+Pure CSSOM read-back — zero tokens, no VLM, runs against the live page. `diff` answers *what*; `why` answers *which rule*.
+
 ### Baseline workflow (watch a project over time)
 
 ```bash
@@ -337,7 +354,7 @@ npm run demo:quick      # real algorithm on synthetic in-memory inputs (no keys)
 npm run demo:generate   # render 3 demo pairs with Playwright
 npm run demo:detect     # deterministic detection on them
 npm run dataset:gen     # regenerate the 193-pair dataset
-npm test                # 269 unit tests, zero API calls
+npm test                # 277 unit tests, zero API calls
 npm run eval:mvp        # four-arm live eval on the 51-pair subset (needs a key)
 npm run stats:report    # CIs + McNemar + bootstrap over any report
 npm run compare:models  # cross-model table from all reports
@@ -410,6 +427,14 @@ The v0.1 dataset was DOM-observable by construction (escalation circularity); th
 
 ## 🔬 For researchers
 
+### Relationship to WUICC-bench (the closest prior work)
+
+[WUICC-bench](https://arxiv.org/abs/2607.01728) (2026) defines Web UI Image Change Captioning — describing UI changes in words — and is the first benchmark for the task. Its headline finding is that **all 11 image-difference-captioning methods it evaluated, plus 2 zero-shot general LLMs, struggle on web UIs** because of layout diversity, dense text, and fine-grained changes.
+
+Every one of those methods is **purely visual** — none uses DOM structure. That is exactly the gap this project fills: the DOM diff knows *which computed property changed and its before/after values*, so 97.1% of regions get a provably-correct answer with zero model involvement, and the VLM is reserved for the 2.9% the DOM can't see (canvas, SVG, image pixels). Where WUICC-bench documents that the visual-only approach is hard, this project shows the structural approach makes most of it free.
+
+**Why not just run on their benchmark?** Their dataset is image pairs + human captions; it has no DOM snapshots, so our deterministic tier can't run on it directly. The honest comparison is the other direction: our 193-pair benchmark *with* DOM ground truth is open, and we report how much of it never needs a model.
+
 Paper draft: [paper/vlm-diff.tex](paper/vlm-diff.tex) · writeups: [Dev.to](https://dev.to/shidesheng/building-a-visual-regression-tool-with-vlms-and-dom-diffing-1j4m) · [掘金](docs/juejin-article.md) · competitive analysis: [docs/marketing/COMPETITIVE_ANALYSIS.md](docs/marketing/COMPETITIVE_ANALYSIS.md)
 
 <details>
@@ -432,10 +457,10 @@ Paper draft: [paper/vlm-diff.tex](paper/vlm-diff.tex) · writeups: [Dev.to](http
 <details>
 <summary><b>References</b></summary>
 
-- **VLM-SubtleBench** (March 2026): [arXiv:2603.07888](https://arxiv.org/abs/2603.07888) — 13K near-identical image pairs, frontier VLM accuracy 62–78%
-- **OmniDiff** (March 2026): [arXiv:2503.11093](https://arxiv.org/abs/2503.11093) — fine-tuned specialist 6× better than GPT-4o zero-shot
-- **WUICC-bench** (July 2026): [arXiv:2607.01728](https://arxiv.org/abs/2607.01728) — first UI visual regression benchmark
-- **Applitools MCP** (January 2026): [blog post](https://applitools.com/blog/add-visual-testing-to-your-ai-workflow-with-the-applitools-mcp-server/)
+- **VLM-SubtleBench** (2026): [arXiv:2603.07888](https://arxiv.org/abs/2603.07888) — VLMs lag humans on *subtle* image differences across 10 categories (spatial, temporal, …); non-UI domains (industrial/aerial/medical)
+- **OmniDiff** (2025): [arXiv:2503.11093](https://arxiv.org/abs/2503.11093) — image-difference captioning dataset (324 scenarios, 12 change types) + a fine-tuned specialist model
+- **WUICC-bench** (2026): [arXiv:2607.01728](https://arxiv.org/abs/2607.01728) — the closest prior work: first benchmark for describing *web UI* changes in words. Evaluated 11 image-difference-captioning methods + 2 zero-shot LLMs and found they **struggle on web UIs** (layout diversity, dense text, fine-grained changes). None of them uses DOM structure — see below.
+- **Applitools MCP** (2026): [blog post](https://applitools.com/blog/add-visual-testing-to-your-ai-workflow-with-the-applitools-mcp-server/)
 - **Chain-of-Focus** (May 2026): [arXiv:2505.15436](https://arxiv.org/abs/2505.15436) — VLM iterative attention
 - **SPARC** (February 2026): [arXiv:2602.06566](https://arxiv.org/abs/2602.06566) — two-stage visual search + reasoning
 
